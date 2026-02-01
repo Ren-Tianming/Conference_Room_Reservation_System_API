@@ -36,11 +36,11 @@ elif page == '会議室情報入力':
     with st.form(key='room'):
         conferenceroom_id: int = random.randint(0,10)
         conferenceroom_name: str = st.text_input('会議室名', max_chars=32)
-        capacity: int = st.number_input('定員', step=1)
+        conferenceroom_capacity: int = st.number_input('定員', step=1)
         data = {
             'conferenceroom_id': conferenceroom_id,
             'conferenceroom_name': conferenceroom_name,
-            'capacity': capacity
+            'conferenceroom_capacity': conferenceroom_capacity
         }
         submit_button = st.form_submit_button(label='リクエスト送信')
 

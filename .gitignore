@@ -16,3 +16,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Temp test file
+test.py
