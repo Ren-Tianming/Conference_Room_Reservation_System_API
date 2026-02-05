@@ -4,10 +4,10 @@ import datetime
 import requests
 import json
 
-page = st.sidebar.selectbox('ページを選択してください:',['ユーザ情報入力','会議室情報入力','予約情報入力'])
+page = st.sidebar.selectbox('ページを選択してください:',['users','conferencerooms','bookings'])
 
-if page == 'ユーザ情報入力':
-    st.title('APIテスト画面(ユーザ情報入力)')
+if page == 'users':
+    st.title('ユーザ登録画面')
 
     with st.form(key='user'):
         user_id: int = random.randint(0,10)
@@ -27,6 +27,9 @@ if page == 'ユーザ情報入力':
             url,
             data=json.dumps(data)
         )
+        if res.status_code == 200 :
+            st.success('ユーザ登録完了')
+        st.write(res.status_code)
         st.json(res.json())
 
 elif page == '会議室情報入力':
