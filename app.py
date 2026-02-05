@@ -4,58 +4,56 @@ import datetime
 import requests
 import json
 
-page = st.sidebar.selectbox('ページを選択してください:',['users','conferencerooms','bookings'])
+page = st.sidebar.selectbox('ページを選択してください:',['ユーザー登録画面','会議室登録画面','bookings'])
 
-if page == 'users':
-    st.title('ユーザ登録画面')
+if page == 'ユーザー登録画面':
+
+    st.title('ユーザー登録画面')
 
     with st.form(key='user'):
-        user_id: int = random.randint(0,10)
         user_name: str = st.text_input('ユーザー名', max_chars=64)
         data = {
-            'user_id': user_id,
             'user_name': user_name
         }
-        submit_button = st.form_submit_button(label='リクエスト送信')
+        submit_button = st.form_submit_button(label='ユーザー登録')
 
     if submit_button:
-        st.write('## 送信データ')
-        st.json(data)
         st.write('## レスポンス結果')
         url = 'http://127.0.0.1:8000/users'
         res = requests.post(
             url,
             data=json.dumps(data)
         )
+
         if res.status_code == 200 :
             st.success('ユーザ登録完了')
         st.write(res.status_code)
         st.json(res.json())
 
-elif page == '会議室情報入力':
+elif page == '会議室登録画面':
 
-    st.title('APIテスト画面(会議室情報入力)')
+    st.title('会議室登録画面')
 
-    with st.form(key='room'):
-        conferenceroom_id: int = random.randint(0,10)
+    with st.form(key='conferenceroom'):
         conferenceroom_name: str = st.text_input('会議室名', max_chars=32)
         conferenceroom_capacity: int = st.number_input('定員', step=1)
         data = {
-            'conferenceroom_id': conferenceroom_id,
             'conferenceroom_name': conferenceroom_name,
             'conferenceroom_capacity': conferenceroom_capacity
         }
-        submit_button = st.form_submit_button(label='リクエスト送信')
+        submit_button = st.form_submit_button(label='会議室登録')
 
     if submit_button:
-        st.write('## 送信データ')
-        st.json(data)
         st.write('## レスポンス結果')
         url = 'http://127.0.0.1:8000/conferencerooms'
         res = requests.post(
             url,
             data=json.dumps(data)
         )
+
+        if res.status_code == 200 :
+            st.success('会議室登録完了')
+        st.write(res.status_code)
         st.json(res.json())
 
 elif page == '予約情報入力':
