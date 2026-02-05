@@ -32,7 +32,6 @@ def create_conferenceroom(db: Session, conferenceroom: schemas.ConferenceRoomCre
     db.refresh(db_conferenceroom)
     return db_conferenceroom
 
-
 # 予約登録する関数
 def create_booking(db:Session, booking: schemas.BookingCreate):
     db_booking = models.Booking(**booking.dict())
