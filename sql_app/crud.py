@@ -47,9 +47,9 @@ def create_booking(db:Session, booking: schemas.BookingCreate):
         models.Booking.conferenceroom_id == booking.conferenceroom_id,
         models.Booking.start_datetime < booking.end_datetime,
         models.Booking.end_datetime > booking.start_datetime
-    ).all()
+    ).first()
     
-    if len(db_booked) == 0:
+    if not db_booked:
         db_booking = models.Booking(**booking.dict())
         db.add(db_booking)
         try:

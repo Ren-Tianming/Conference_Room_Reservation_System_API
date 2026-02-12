@@ -23,11 +23,13 @@ class Booking(Base):
         ForeignKey('users.user_id', ondelete = 'RESTRICT'), 
         nullable = False
         )
+    
     conferenceroom_id = Column(
         Integer, 
-        ForeignKey('conferencerooms.conferenceroom_id', ondelete = 'SET NULL'), 
-        nullable = True
+        ForeignKey('conferencerooms.conferenceroom_id', ondelete = 'RESTRICT'), 
+        nullable = False
         )
+    
     booking_capacity = Column(Integer, nullable = False)
     start_datetime = Column(DateTime, nullable = False)
     end_datetime = Column(DateTime, nullable = False)
