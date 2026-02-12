@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from . import models, schemas
+from fastapi import HTTPException
 
 # ユーザー一覧を取得する関数
 def get_users(db: Session, skip: int = 0, limit: int = 100):
@@ -16,10 +17,14 @@ def get_bookings(db: Session, skip: int = 0, limit: int = 100):
 # ユーザー登録する関数
 def create_user(db: Session, user: schemas.UserCreate):
     db_user = models.User(user_name = user.user_name)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except:
+        db.rollback()
+        raise
 
 # 会議室登録する関数
 def create_conferenceroom(db: Session, conferenceroom: schemas.ConferenceRoomCreate):
@@ -28,14 +33,32 @@ def create_conferenceroom(db: Session, conferenceroom: schemas.ConferenceRoomCre
         conferenceroom_capacity = conferenceroom.conferenceroom_capacity
     )
     db.add(db_conferenceroom)
-    db.commit()
-    db.refresh(db_conferenceroom)
-    return db_conferenceroom
+    try:
+        db.commit()
+        db.refresh(db_conferenceroom)
+        return db_conferenceroom
+    except:
+        db.rollback()
+        raise
 
 # 予約登録する関数
 def create_booking(db:Session, booking: schemas.BookingCreate):
-    db_booking = models.Booking(**booking.dict())
-    db.add(db_booking)
-    db.commit()
-    db.refresh(db_booking)
-    return db_booking
+    db_booked = db.query(models.Booking).filter(
+        models.Booking.conferenceroom_id == booking.conferenceroom_id,
+        models.Booking.start_datetime < booking.end_datetime,
+        models.Booking.end_datetime > booking.start_datetime
+    ).all()
+    
+    if len(db_booked) == 0:
+        db_booking = models.Booking(**booking.dict())
+        db.add(db_booking)
+        try:
+            db.commit()
+            db.refresh(db_booking)
+            return db_booking
+        except:
+            db.rollback()
+            raise
+
+    else:
+        raise HTTPException(status_code=409, detail = "Already booked")

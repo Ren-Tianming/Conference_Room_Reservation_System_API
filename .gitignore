@@ -19,3 +19,6 @@ __pycache__/
 
 # Temp files
 tmp_*.py
+
+# datavase
+sql_app.db

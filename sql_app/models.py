@@ -1,9 +1,10 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
 from .database import Base
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = 'users'
-    user_id = Column(Integer, primary_key = True,index = True)
+    user_id = Column(Integer, primary_key = True, index = True)
     user_name = Column(String, unique = True, index = True)
 
 class ConferenceRoom(Base):
@@ -14,11 +15,13 @@ class ConferenceRoom(Base):
 
 class Booking(Base):
     __tablename__ = 'bookings'
+    user = relationship("User")
+    conferenceroom = relationship("ConferenceRoom")
     booking_id = Column(Integer, primary_key = True,index = True)
     user_id = Column(
         Integer, 
-        ForeignKey('users.user_id', ondelete = 'SET NULL'), 
-        nullable = True
+        ForeignKey('users.user_id', ondelete = 'RESTRICT'), 
+        nullable = False
         )
     conferenceroom_id = Column(
         Integer, 
