@@ -37,7 +37,7 @@ elif page == '会議室登録画面':
 
     st.title('会議室登録画面')
 
-    with st.form(key='conferenceroom'):
+    with st.form(key = 'conferenceroom'):
         conferenceroom_name: str = st.text_input('会議室名', max_chars=32)
         conferenceroom_capacity: int = st.number_input('定員', step=1)
         data = {

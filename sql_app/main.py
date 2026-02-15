@@ -16,6 +16,19 @@ def get_db():
     finally:
         db.close()
 
+# Create
+@app.post("/users",response_model=schemas.UserCreate)
+async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    return crud.create_user(db = db, user = user)
+
+@app.post("/conferencerooms",response_model=schemas.ConferenceRoomCreate)
+async def create_conferenceroom(conferenceroom: schemas.ConferenceRoomCreate, db: Session = Depends(get_db)):
+    return crud.create_conferenceroom(db = db, conferenceroom = conferenceroom)
+
+@app.post("/bookings",response_model=schemas.BookingCreate)
+async def create_booking(booking: schemas.BookingCreate, db: Session = Depends(get_db)):
+    return crud.create_booking(db = db, booking = booking)
+
 # Read
 @app.get("/users", response_model = List[schemas.User])
 async def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -31,16 +44,3 @@ async def read_conferencerooms(skip: int = 0, limit: int = 100, db: Session = De
 async def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     bookings = crud.get_bookings(db, skip=skip, limit=limit)
     return bookings
-
-# Create
-@app.post("/users",response_model=schemas.User)
-async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    return crud.create_user(db = db, user = user)
-
-@app.post("/conferencerooms",response_model=schemas.ConferenceRoom)
-async def create_conferenceroom(conferenceroom: schemas.ConferenceRoomCreate, db: Session = Depends(get_db)):
-    return crud.create_conferenceroom(db = db, conferenceroom = conferenceroom)
-
-@app.post("/bookings",response_model=schemas.Booking)
-async def create_booking(booking: schemas.BookingCreate, db: Session = Depends(get_db)):
-    return crud.create_booking(db = db, booking = booking)
