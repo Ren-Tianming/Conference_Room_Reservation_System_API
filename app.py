@@ -65,133 +65,185 @@ elif page == '会議室登録画面':
 elif page == '予約登録画面':
 
     st.title('予約登録画面')
+
+    # ===============================
     # ユーザー一覧取得
+    # ===============================
     url_users = 'http://127.0.0.1:8000/users'
     res = requests.get(url_users)
     users = res.json()
 
-    # ユーザー名はキー、ユーザーIDはバリュー
-    users_name = {}
-    for user in users:
-        users_name[user['user_name']] = user['user_id']
+    users_name = {user['user_name']: user['user_id'] for user in users}
+    user_id_map = {user['user_id']: user['user_name'] for user in users}
 
+    # ===============================
     # 会議室一覧取得
-    url_conferencerooms = 'http://127.0.0.1:8000/conferencerooms'
-    res = requests.get(url_conferencerooms)
+    # ===============================
+    url_rooms = 'http://127.0.0.1:8000/conferencerooms'
+    res = requests.get(url_rooms)
     conferencerooms = res.json()
 
-    conferencerooms_name = {}
-    for conferenceroom in conferencerooms:
-        conferencerooms_name[conferenceroom['conferenceroom_name']] = {
-            'conferenceroom_id': conferenceroom['conferenceroom_id'],
-            'conferenceroom_capacity': conferenceroom['conferenceroom_capacity']
+    conferencerooms_name = {
+        room['conferenceroom_name']: {
+            'conferenceroom_id': room['conferenceroom_id'],
+            'conferenceroom_capacity': room['conferenceroom_capacity']
         }
-    
-    st.write('### 会議室一覧')
-    df_conferencerooms = pd.DataFrame(conferencerooms)
-    df_conferencerooms.columns = ['会議室ID', '会議室名', '会議室定員']
-    st.table(df_conferencerooms)
+        for room in conferencerooms
+    }
 
+    room_id_map = {
+        room['conferenceroom_id']: {
+            'name': room['conferenceroom_name'],
+            'capacity': room['conferenceroom_capacity']
+        }
+        for room in conferencerooms
+    }
+
+    # ===============================
+    # 会議室一覧表示
+    # ===============================
+    st.write('### 会議室一覧')
+    df_rooms = pd.DataFrame(conferencerooms)
+
+    if not df_rooms.empty:
+        df_rooms.columns = ['会議室ID', '会議室名', '会議室定員']
+        st.table(df_rooms)
+    else:
+        st.info("会議室は登録されていません")
+
+    # ===============================
     # 予約一覧取得
+    # ===============================
     url_bookings = 'http://127.0.0.1:8000/bookings'
     res = requests.get(url_bookings)
     bookings = res.json()
 
     st.write('### 予約一覧')
-    df_bookings = pd.DataFrame(bookings)
 
-    user_id = {}
-    for user in users:
-        user_id[user['user_id']] = user['user_name']
-    
-    conferenceroom_id = {}
-    for conferenceroom in conferencerooms:
-        conferenceroom_id[conferenceroom['conferenceroom_id']] = {
-            'conferenceroom_name': conferenceroom['conferenceroom_name'],
-            'conferenceroom_capacity': conferenceroom['conferenceroom_capacity']
+    if not bookings:
+        st.info("現在予約はありません")
+    else:
+        df_bookings = pd.DataFrame(bookings)
+
+        df_bookings['user_id'] = df_bookings['user_id'].map(
+            lambda x: user_id_map.get(x, "不明")
+        )
+        df_bookings['conferenceroom_id'] = df_bookings['conferenceroom_id'].map(
+            lambda x: room_id_map.get(x, {}).get('name', "不明")
+        )
+        df_bookings['start_datetime'] = df_bookings['start_datetime'].map(
+            lambda x: datetime.datetime.fromisoformat(x).strftime('%Y/%m/%d %H:%M')
+        )
+        df_bookings['end_datetime'] = df_bookings['end_datetime'].map(
+            lambda x: datetime.datetime.fromisoformat(x).strftime('%Y/%m/%d %H:%M')
+        )
+
+        df_bookings = df_bookings.rename(
+            columns={
+                'booking_id': '予約番号',
+                'user_id': '予約者名',
+                'conferenceroom_id': '会議室名',
+                'booking_capacity': '予約人数',
+                'start_datetime': '開始時刻',
+                'end_datetime': '終了時刻'
             }
-    
-    # IDを各値に変換
-    to_user_name = lambda x: user_id[x]
-    to_conferenceroom_name = lambda x: conferenceroom_id[x]['conferenceroom_name']
-    to_datetime = lambda x: datetime.datetime.fromisoformat(x).strftime('%Y/%m/%d %H:%M')
+        )
 
-    # 特定の列に適用
-    df_bookings['user_id'] = df_bookings['user_id'].map(to_user_name)
-    df_bookings['conferenceroom_id'] = df_bookings['conferenceroom_id'].map(to_conferenceroom_name)
-    df_bookings['start_datetime'] = df_bookings['start_datetime'].map(to_datetime)
-    df_bookings['end_datetime'] = df_bookings['end_datetime'].map(to_datetime)
+        st.table(df_bookings)
 
-    df_bookings = df_bookings.rename(
-        columns={
-            'user_id': '予約者名',
-            'conferenceroom_id': '会議室名',
-            'booking_capacity': '予約人数',
-            'start_datetime': '開始時刻',
-            'end_datetime': '終了時刻',
-            'booking_id': '予約番号'
-        }
-    )
-    st.table(df_bookings)
+    # ===============================
+    # 予約削除
+    # ===============================
+    st.write('---')
+    st.write('### 予約削除')
 
-    with st.form(key='booking'):
-        user_name: str = st.selectbox('予約者名', users_name.keys())
-        conferenceroom_name: str = st.selectbox('会議室名', conferencerooms_name.keys())
-        booking_capacity: int = st.number_input('予約人数', step=1, min_value=1)
-        start_date = st.date_input('会議室の予約日付を入力してください:',min_value=datetime.date.today())
-        start_time = st.time_input('会議室の予約開始時刻を入力してください:',value=datetime.time(hour=9,minute=0))
-        end_time = st.time_input('会議室の予約終了時刻を入力してください:',value=datetime.time(hour=22,minute=0))
-
-        submit_button = st.form_submit_button(label='予約登録')
-
-    if submit_button:
-        user_id = users_name[user_name]
-        conferenceroom_id = conferencerooms_name[conferenceroom_name]['conferenceroom_id']
-        conferenceroom_capacity = conferencerooms_name[conferenceroom_name]['conferenceroom_capacity']
-        data = {
-            'user_id': user_id,
-            'conferenceroom_id': conferenceroom_id,
-            'booking_capacity': booking_capacity,
-            'start_datetime': datetime.datetime(
-                year=start_date.year,
-                month=start_date.month,
-                day=start_date.day,
-                hour=start_time.hour,
-                minute=start_time.minute
-            ).isoformat(),
-            'end_datetime':datetime.datetime(
-                year=start_date.year,
-                month=start_date.month,
-                day=start_date.day,
-                hour=end_time.hour,
-                minute=end_time.minute
-            ).isoformat()
+    if bookings:
+        booking_options = {
+            f"{b['booking_id']} | {user_id_map.get(b['user_id'])} | {room_id_map.get(b['conferenceroom_id'], {}).get('name')}":
+            b['booking_id']
+            for b in bookings
         }
 
-        # 定員より多い予約人数の場合
-        if booking_capacity > conferenceroom_capacity:
-            st.error(f'{conferenceroom_name}の定員は、{conferenceroom_capacity}名です。{conferenceroom_capacity}名以下の予約人数のみ受け付けております。')
-        
-        elif start_time >= end_time:
-            st.error('開始時刻が終了時刻を超えています。')
-        
-        elif start_time < datetime.time(hour = 9, minute = 0, second = 0) or end_time > datetime.time(hour = 22, minute = 0, second = 0):
-            st.error('利用時間は9:00 ~ 22:00になります。')
+        with st.form(key='delete_booking'):
+            selected_label = st.selectbox('削除する予約を選択', booking_options.keys())
+            delete_button = st.form_submit_button('予約削除')
 
-        else:
-            # 会議室の予約を行う
-            url = 'http://127.0.0.1:8000/bookings'
+        if delete_button:
+            delete_id = booking_options[selected_label]
+            delete_url = f'http://127.0.0.1:8000/bookings/{delete_id}'
+
             try:
-                res = requests.post(
-                    url,
-                    json=data
-                )
+                res = requests.delete(delete_url)
             except requests.exceptions.ConnectionError:
                 st.error("APIサーバーに接続できません")
-                
-            if res.status_code == 200: 
-                st.success('予約完了しました！')
-            elif res.status_code == 409 and res.json()['detail'] == "Already booked": 
-                st.error('指定の時間には既に予約が入っています。')
-            
-            st.json(res.json())
+            else:
+                if res.status_code == 200:
+                    st.success("予約を削除しました")
+                    st.rerun()
+                else:
+                    st.error("削除に失敗しました")
+                    st.json(res.json())
+    else:
+        st.info("削除できる予約はありません")
+
+    # ===============================
+    # 予約登録フォーム（常に表示）
+    # ===============================
+    st.write('---')
+    st.write('### 予約登録')
+
+    if not users_name or not conferencerooms_name:
+        st.warning("ユーザーまたは会議室を先に登録してください")
+    else:
+        with st.form(key='booking'):
+            user_name = st.selectbox('予約者名', users_name.keys())
+            room_name = st.selectbox('会議室名', conferencerooms_name.keys())
+            booking_capacity = st.number_input('予約人数', min_value=1, step=1)
+
+            start_date = st.date_input(
+                '予約日付',
+                min_value=datetime.date.today()
+            )
+            start_time = st.time_input(
+                '開始時刻',
+                value=datetime.time(hour=9)
+            )
+            end_time = st.time_input(
+                '終了時刻',
+                value=datetime.time(hour=22)
+            )
+
+            submit_button = st.form_submit_button('予約登録')
+
+        if submit_button:
+            room_info = conferencerooms_name[room_name]
+
+            if booking_capacity > room_info['conferenceroom_capacity']:
+                st.error("定員を超えています")
+            elif start_time >= end_time:
+                st.error("開始時刻が終了時刻を超えています")
+            elif start_time < datetime.time(9, 0) or end_time > datetime.time(22, 0):
+                st.error("利用時間は 9:00 ~ 22:00 です")
+            else:
+                data = {
+                    'user_id': users_name[user_name],
+                    'conferenceroom_id': room_info['conferenceroom_id'],
+                    'booking_capacity': booking_capacity,
+                    'start_datetime': datetime.datetime.combine(start_date, start_time).isoformat(),
+                    'end_datetime': datetime.datetime.combine(start_date, end_time).isoformat()
+                }
+
+                try:
+                    res = requests.post(
+                        'http://127.0.0.1:8000/bookings',
+                        json=data
+                    )
+                except requests.exceptions.ConnectionError:
+                    st.error("APIサーバーに接続できません")
+                else:
+                    if res.status_code == 200:
+                        st.success("予約完了しました")
+                        st.rerun()
+                    else:
+                        st.error("予約に失敗しました")
+                        st.json(res.json())

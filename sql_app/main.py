@@ -17,17 +17,17 @@ def get_db():
         db.close()
 
 # Create
-@app.post("/users",response_model=schemas.UserCreate)
+@app.post("/users", response_model=schemas.UserResponse)
 async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    return crud.create_user(db = db, user = user)
+    return crud.create_user(db=db, user=user)
 
-@app.post("/conferencerooms",response_model=schemas.ConferenceRoomCreate)
+@app.post("/conferencerooms", response_model=schemas.ConferenceRoomResponse)
 async def create_conferenceroom(conferenceroom: schemas.ConferenceRoomCreate, db: Session = Depends(get_db)):
-    return crud.create_conferenceroom(db = db, conferenceroom = conferenceroom)
+    return crud.create_conferenceroom(db=db, conferenceroom=conferenceroom)
 
-@app.post("/bookings",response_model=schemas.BookingCreate)
+@app.post("/bookings", response_model=schemas.BookingResponse)
 async def create_booking(booking: schemas.BookingCreate, db: Session = Depends(get_db)):
-    return crud.create_booking(db = db, booking = booking)
+    return crud.create_booking(db=db, booking=booking)
 
 # Read
 @app.get("/users", response_model = List[schemas.UserResponse])
@@ -46,4 +46,14 @@ async def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(g
     return bookings
 
 # Delete
+@app.delete("/users/{user_id}", response_model=schemas.UserResponse)
+async def delete_user(user_id: int, db: Session = Depends(get_db)):
+    return crud.delete_user(db=db, user_id=user_id)
 
+@app.delete("/conferencerooms/{conferenceroom_id}", response_model=schemas.ConferenceRoomResponse)
+async def delete_conferenceroom(conferenceroom_id: int, db: Session = Depends(get_db)):
+    return crud.delete_conferenceroom(db=db, conferenceroom_id=conferenceroom_id)
+
+@app.delete("/bookings/{booking_id}", response_model=schemas.BookingResponse)
+async def delete_booking(booking_id: int, db: Session = Depends(get_db)):
+    return crud.delete_booking(db=db, booking_id=booking_id)
