@@ -1,46 +1,79 @@
-from typing import List
+from sql_app import crud, schemas
 from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
+from sql_app.database import async_engine, AsyncSessionLocal, create_table
+from sqlalchemy.ext.asyncio import AsyncSession
+from contextlib import asynccontextmanager
+from typing import List
 
-from . import crud, models, schemas
-from .database import SessionLocal, engine
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时执行
+    await create_table()
+    yield
+    # 关闭时执行（如果需要释放资源）
+    await async_engine.dispose()
 
-models.Base.metadata.create_all(bind=engine)
+app = FastAPI(lifespan=lifespan)
 
-app = FastAPI()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 # Create
-@app.post("/users",response_model=schemas.UserCreate)
-async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    return crud.create_user(db = db, user = user)
+@app.post("/users", response_model=schemas.User) 
+async def create_user(user: schemas.UserCreate, db: AsyncSession = Depends(get_db)):
+    return await crud.create_user(db=db, user=user)
 
-@app.post("/conferencerooms",response_model=schemas.ConferenceRoomCreate)
-async def create_conferenceroom(conferenceroom: schemas.ConferenceRoomCreate, db: Session = Depends(get_db)):
-    return crud.create_conferenceroom(db = db, conferenceroom = conferenceroom)
+@app.post("/conferencerooms",response_model=schemas.ConferenceRoom)
+async def create_conferenceroom(conferenceroom: schemas.ConferenceRoomCreate, db: AsyncSession = Depends(get_db)):
+    return await crud.create_conferenceroom(db = db, conferenceroom = conferenceroom)
 
-@app.post("/bookings",response_model=schemas.BookingCreate)
-async def create_booking(booking: schemas.BookingCreate, db: Session = Depends(get_db)):
-    return crud.create_booking(db = db, booking = booking)
+@app.post("/bookings",response_model=schemas.Booking)
+async def create_booking(booking: schemas.BookingCreate, db: AsyncSession = Depends(get_db)):
+    return await crud.create_booking(db = db, booking = booking)
 
 # Read
-@app.get("/users", response_model = List[schemas.User])
-async def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = crud.get_users(db, skip=skip, limit=limit)
-    return users
+@app.get("/users", response_model=List[schemas.User])
+async def read_users(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    return await crud.get_users(db, skip=skip, limit=limit)
 
 @app.get("/conferencerooms", response_model = List[schemas.ConferenceRoom])
-async def read_conferencerooms(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    conferencerooms = crud.get_conferencerooms(db, skip=skip, limit=limit)
-    return conferencerooms
+async def read_conferencerooms(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    return await crud.get_conferencerooms(db, skip=skip, limit=limit)
 
 @app.get("/bookings", response_model = List[schemas.Booking])
-async def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    bookings = crud.get_bookings(db, skip=skip, limit=limit)
-    return bookings
+async def read_bookings(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    return await crud.get_bookings(db, skip=skip, limit=limit)
+
+# Update
+@app.put("/users/{user_id}", response_model=schemas.User)
+async def update_user(user_id: int, user: schemas.UserUpdate, db: AsyncSession = Depends(get_db)):
+    return await crud.update_user(db=db, user_id=user_id, user=user)
+
+@app.put("/conferencerooms/{conferenceroom_id}", response_model=schemas.ConferenceRoom)
+async def update_conferenceroom(conferenceroom_id: int, conferenceroom: schemas.ConferenceRoomUpdate, db: AsyncSession = Depends(get_db)):
+    return await crud.update_conferenceroom(db=db, conferenceroom_id=conferenceroom_id, conferenceroom=conferenceroom)
+
+@app.put("/bookings/{booking_id}", response_model=schemas.Booking)
+async def update_booking(booking_id: int, booking: schemas.BookingUpdate, db: AsyncSession = Depends(get_db)):
+    return await crud.update_booking(db=db, booking_id=booking_id, booking=booking) 
+
+# Delete
+@app.delete("/users/{user_id}")
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    return await crud.delete_user(db=db, user_id=user_id)  
+
+@app.delete("/conferencerooms/{conferenceroom_id}")
+async def delete_conferenceroom(conferenceroom_id: int, db: AsyncSession = Depends(get_db)):
+    return await crud.delete_conferenceroom(db=db, conferenceroom_id=conferenceroom_id)    
+
+@app.delete("/bookings/{booking_id}")
+async def delete_booking(booking_id: int, db: AsyncSession = Depends(get_db)):
+    return await crud.delete_booking(db=db, booking_id=booking_id) 
