@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from . import models, schemas
+
+from ..schemas import schemas
+from ..models import models
 from fastapi import HTTPException
 
 # ユーザーを登録
