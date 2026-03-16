@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.session import Base
+from app.db.base_class import Base
 
 
-class ConferenceRoom(Base):
-    __tablename__ = 'conference_rooms'
+class Room(Base):
+    __tablename__ = 'rooms'
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    location: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    capacity: Mapped[int] = mapped_column(nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    capacity: Mapped[int] = mapped_column(Integer)
+    location: Mapped[str] = mapped_column(String(100), default='本社')
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    bookings: Mapped[list['Booking']] = relationship(back_populates='room')
+    bookings = relationship('Booking', back_populates='room', cascade='all, delete-orphan')

@@ -1,19 +1,41 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, bookings, health, rooms
+from app.api.router import api_router
 from app.core.config import settings
-from app.db.session import Base, engine
+from app.db.session import create_db_and_tables
+from app.services.room_service import seed_default_rooms
 
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.auto_create_tables:
+        create_db_and_tables()
+        seed_default_rooms()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
-    version='2.0.0',
-    docs_url='/docs',
-    redoc_url='/redoc',
+    debug=settings.debug,
+    lifespan=lifespan,
 )
 
-app.include_router(health.router, prefix=settings.api_v1_prefix, tags=['health'])
-app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth", tags=['auth'])
-app.include_router(rooms.router, prefix=f"{settings.api_v1_prefix}/rooms", tags=['rooms'])
-app.include_router(bookings.router, prefix=f"{settings.api_v1_prefix}/bookings", tags=['bookings'])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "Conference Room Reservation System API is running."}

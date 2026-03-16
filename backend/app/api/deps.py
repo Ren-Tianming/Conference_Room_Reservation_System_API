@@ -1,17 +1,18 @@
+from __future__ import annotations
+
 from typing import Generator
 
-import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.security import decode_token
-from app.db.redis_client import get_redis
+from app.core.redis_client import is_token_blacklisted
 from app.db.session import SessionLocal
-from app.models.user import User, UserRole
+from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -23,39 +24,31 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
 ) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail='登录状态无效或已过期',
-        headers={'WWW-Authenticate': 'Bearer'},
-    )
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="認証が必要です。")
+
+    token = credentials.credentials
     try:
         payload = decode_token(token)
-    except jwt.InvalidTokenError as exc:
-        raise credentials_exception from exc
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="無効なトークンです。") from exc
 
-    if payload.get('type') != 'access':
-        raise credentials_exception
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="アクセストークンが必要です。")
 
-    jti = payload.get('jti')
-    if jti:
-        redis_client = get_redis()
-        if redis_client.exists(f'auth:blacklist:{jti}'):
-            raise credentials_exception
+    jti = payload.get("jti")
+    if jti and is_token_blacklisted(jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="無効化されたトークンです。")
 
-    user_id = payload.get('sub')
-    if not user_id:
-        raise credentials_exception
+    user_id = payload.get("user_id")
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="トークン情報が不正です。")
 
-    user = db.get(User, int(user_id))
-    if not user or not user.is_active:
-        raise credentials_exception
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="ユーザーが存在しません。")
+
     return user
-
-
-def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='需要管理员权限')
-    return current_user

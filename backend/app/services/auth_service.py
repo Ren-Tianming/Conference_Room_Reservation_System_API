@@ -1,122 +1,117 @@
-from datetime import UTC, datetime
+from __future__ import annotations
 
-import jwt
+from datetime import timedelta, timezone
+
 from fastapi import HTTPException, status
-from redis import Redis
-from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
+from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-    hash_password,
-    verify_password,
-)
+from app.core.config import settings
+from app.core.redis_client import blacklist_token
+from app.core.security import create_token, decode_token, get_password_hash, verify_password
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.schemas.auth import TokenResponse
 from app.schemas.user import UserCreate
+from app.services.user_service import get_user_by_username
 
 
 def register_user(db: Session, payload: UserCreate) -> User:
-    existing_user = db.execute(
-        select(User).where(or_(User.username == payload.username, User.email == payload.email))
-    ).scalar_one_or_none()
-    if existing_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='用户名或邮箱已存在')
+    exists = get_user_by_username(db, payload.username)
+    if exists is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='このユーザー名は既に使用されています。')
 
-    user = User(
-        username=payload.username,
-        email=payload.email,
-        password_hash=hash_password(payload.password),
-    )
+    user = User(username=payload.username, password_hash=get_password_hash(payload.password))
     db.add(user)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='用户创建失败，数据重复') from exc
+    db.commit()
     db.refresh(user)
     return user
 
 
-def authenticate_user(db: Session, login_name: str, password: str) -> User | None:
-    user = db.execute(
-        select(User).where(or_(User.username == login_name, User.email == login_name))
-    ).scalar_one_or_none()
-    if not user:
-        return None
-    if not verify_password(password, user.password_hash):
-        return None
+def authenticate_user(db: Session, username: str, password: str) -> User:
+    user = get_user_by_username(db, username)
+    if user is None or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザー名またはパスワードが正しくありません。')
     if not user.is_active:
-        return None
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='無効なユーザーです。')
     return user
 
 
-def _store_refresh_token(redis_client: Redis, jti: str, user_id: int, expires_at: datetime) -> None:
-    ttl = max(int((expires_at - datetime.now(UTC)).total_seconds()), 1)
-    redis_client.setex(f'auth:refresh:{jti}', ttl, str(user_id))
+def create_access_and_refresh_tokens(db: Session, user: User) -> TokenResponse:
+    access_token, _, _ = create_token(
+        user_id=user.id,
+        token_type='access',
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    refresh_token, refresh_jti, refresh_expire = create_token(
+        user_id=user.id,
+        token_type='refresh',
+        expires_delta=timedelta(days=settings.refresh_token_expire_days),
+    )
+
+    refresh_model = RefreshToken(user_id=user.id, token_jti=refresh_jti, expires_at=refresh_expire)
+    db.add(refresh_model)
+    db.commit()
+
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-def _blacklist_access_token(redis_client: Redis, jti: str, expires_at: datetime) -> None:
-    ttl = max(int((expires_at - datetime.now(UTC)).total_seconds()), 1)
-    redis_client.setex(f'auth:blacklist:{jti}', ttl, '1')
-
-
-def issue_token_pair(user: User, redis_client: Redis) -> dict:
-    access_token, access_jti, access_expires_at = create_access_token(str(user.id))
-    refresh_token, refresh_jti, refresh_expires_at = create_refresh_token(str(user.id))
-    _store_refresh_token(redis_client, refresh_jti, user.id, refresh_expires_at)
-    return {
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'access_token_expires_at': access_expires_at,
-        'refresh_token_expires_at': refresh_expires_at,
-    }
-
-
-def refresh_access_token(db: Session, redis_client: Redis, refresh_token: str) -> tuple[User, dict]:
+def rotate_refresh_token(db: Session, refresh_token: str) -> TokenResponse:
     try:
         payload = decode_token(refresh_token)
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='refresh token 无效') from exc
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='無効なリフレッシュトークンです。') from exc
 
     if payload.get('type') != 'refresh':
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='token 类型错误')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='リフレッシュトークンが必要です。')
 
-    user_id = payload.get('sub')
+    user_id = payload.get('user_id')
     jti = payload.get('jti')
-    if not user_id or not jti:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='refresh token 缺少必要字段')
+    if user_id is None or jti is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='トークン情報が不正です。')
 
-    key = f'auth:refresh:{jti}'
-    if redis_client.get(key) != str(user_id):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='refresh token 已失效')
+    stmt = select(RefreshToken).where(RefreshToken.token_jti == jti, RefreshToken.user_id == user_id)
+    stored = db.execute(stmt).scalar_one_or_none()
+    if stored is None or stored.revoked:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='このリフレッシュトークンは使用できません。')
 
-    user = db.get(User, int(user_id))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='用户不存在或已被禁用')
+    stored.revoked = True
+    blacklist_token(jti, stored.expires_at)
+    db.add(stored)
+    db.commit()
 
-    redis_client.delete(key)
-    return user, issue_token_pair(user, redis_client)
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザーが存在しません。')
+
+    return create_access_and_refresh_tokens(db, user)
 
 
-def logout_tokens(redis_client: Redis, access_token: str, refresh_token: str | None = None) -> None:
+def revoke_tokens(db: Session, *, access_token: str, refresh_token: str | None, user_id: int) -> None:
     try:
         access_payload = decode_token(access_token)
         access_jti = access_payload.get('jti')
         access_exp = access_payload.get('exp')
-        if access_jti and access_exp:
-            expires_at = datetime.fromtimestamp(access_exp, tz=UTC)
-            _blacklist_access_token(redis_client, access_jti, expires_at)
-    except jwt.InvalidTokenError:
+        access_user_id = access_payload.get('user_id')
+        if access_jti and access_exp and access_user_id == user_id:
+            from datetime import datetime
+            blacklist_token(access_jti, datetime.fromtimestamp(access_exp, tz=timezone.utc))
+    except Exception:
         pass
 
     if refresh_token:
         try:
             refresh_payload = decode_token(refresh_token)
             refresh_jti = refresh_payload.get('jti')
-            if refresh_jti:
-                redis_client.delete(f'auth:refresh:{refresh_jti}')
-        except jwt.InvalidTokenError:
+            refresh_user_id = refresh_payload.get('user_id')
+            if refresh_jti and refresh_user_id == user_id:
+                stmt = select(RefreshToken).where(RefreshToken.token_jti == refresh_jti, RefreshToken.user_id == user_id)
+                stored = db.execute(stmt).scalar_one_or_none()
+                if stored is not None:
+                    stored.revoked = True
+                    db.add(stored)
+                    blacklist_token(refresh_jti, stored.expires_at)
+                    db.commit()
+        except Exception:
             pass

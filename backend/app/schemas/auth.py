@@ -1,23 +1,23 @@
-from datetime import datetime
+from __future__ import annotations
 
-from pydantic import BaseModel
-
-from app.schemas.user import UserRead
+from pydantic import BaseModel, Field
 
 
-class TokenPair(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = 'bearer'
-    access_token_expires_at: datetime
-    refresh_token_expires_at: datetime
-    user: UserRead
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=128)
 
 
-class RefreshTokenRequest(BaseModel):
+class RefreshRequest(BaseModel):
     refresh_token: str
 
 
 class LogoutRequest(BaseModel):
     access_token: str
     refresh_token: str | None = None
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = 'bearer'
