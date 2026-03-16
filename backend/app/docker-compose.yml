@@ -1,0 +1,38 @@
+version: '3.9'
+
+services:
+  api:
+    image: python:3.12-slim
+    container_name: meeting-room-api
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: bash -lc "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    env_file:
+      - .env
+    ports:
+      - '8000:8000'
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+    container_name: meeting-room-db
+    environment:
+      POSTGRES_DB: meeting_room
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: meeting-room-redis
+    ports:
+      - '6379:6379'
+
+volumes:
+  postgres_data:
