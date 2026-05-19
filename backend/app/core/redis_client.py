@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional, Union
 
+from fastapi import HTTPException, status
 from redis import Redis
 from redis.exceptions import RedisError
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 _SENTINEL = object()
-_cached_client: Redis | None | object = _SENTINEL
+_cached_client: Union[Redis, object, None] = _SENTINEL
 
 
 class DummyLock:
@@ -22,8 +25,7 @@ class DummyLock:
         return False
 
 
-
-def get_redis_client() -> Redis | None:
+def get_redis_client() -> Optional[Redis]:
     global _cached_client
     if _cached_client is not _SENTINEL and _cached_client is not None:
         return _cached_client  # type: ignore[return-value]
@@ -32,7 +34,8 @@ def get_redis_client() -> Redis | None:
         client.ping()
         _cached_client = client
         return client
-    except Exception:
+    except Exception as exc:
+        logger.warning('Redis is unavailable: %s', exc)
         _cached_client = None
         return None
 
@@ -43,11 +46,11 @@ def set_json(key: str, value: Any, ttl_seconds: int = 60) -> None:
         return
     try:
         client.setex(key, ttl_seconds, json.dumps(value, default=str))
-    except RedisError:
-        return
+    except RedisError as exc:
+        logger.warning('Failed to set Redis JSON cache for %s: %s', key, exc)
 
 
-def get_json(key: str) -> Any | None:
+def get_json(key: str) -> Optional[Any]:
     client = get_redis_client()
     if client is None:
         return None
@@ -56,7 +59,8 @@ def get_json(key: str) -> Any | None:
         if value is None:
             return None
         return json.loads(value)
-    except (RedisError, json.JSONDecodeError):
+    except (RedisError, json.JSONDecodeError) as exc:
+        logger.warning('Failed to get Redis JSON cache for %s: %s', key, exc)
         return None
 
 
@@ -66,28 +70,37 @@ def delete_key(key: str) -> None:
         return
     try:
         client.delete(key)
-    except RedisError:
-        return
+    except RedisError as exc:
+        logger.warning('Failed to delete Redis key %s: %s', key, exc)
 
 
 def blacklist_token(jti: str, expires_at: datetime) -> None:
     client = get_redis_client()
     if client is None:
+        if settings.require_redis_for_token_blacklist:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Redis が利用できないためトークンを無効化できません。')
         return
     ttl = max(int((expires_at - datetime.now(timezone.utc)).total_seconds()), 1)
     try:
         client.setex(f"blacklist:{jti}", ttl, "1")
-    except RedisError:
-        return
+    except RedisError as exc:
+        logger.warning('Failed to blacklist token %s: %s', jti, exc)
+        if settings.require_redis_for_token_blacklist:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='トークン無効化に失敗しました。') from exc
 
 
 def is_token_blacklisted(jti: str) -> bool:
     client = get_redis_client()
     if client is None:
+        if settings.require_redis_for_token_blacklist:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Redis が利用できないためトークン状態を確認できません。')
         return False
     try:
         return bool(client.exists(f"blacklist:{jti}"))
-    except RedisError:
+    except RedisError as exc:
+        logger.warning('Failed to check token blacklist for %s: %s', jti, exc)
+        if settings.require_redis_for_token_blacklist:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='トークン状態確認に失敗しました。') from exc
         return False
 
 
@@ -95,6 +108,9 @@ def is_token_blacklisted(jti: str) -> bool:
 def room_lock(room_id: int) -> Iterator[object]:
     client = get_redis_client()
     if client is None:
+        if settings.require_redis_for_locks:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Redis が利用できないため予約ロックを取得できません。')
+        logger.warning('Using in-process fallback lock for room_id=%s because Redis is unavailable.', room_id)
         yield DummyLock()
         return
 
@@ -102,10 +118,12 @@ def room_lock(room_id: int) -> Iterator[object]:
     acquired = False
     try:
         acquired = lock.acquire(blocking=True)
+        if not acquired:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='予約処理が混雑しています。再試行してください。')
         yield lock
     finally:
         if acquired:
             try:
                 lock.release()
-            except RedisError:
-                pass
+            except RedisError as exc:
+                logger.warning('Failed to release room lock for room_id=%s: %s', room_id, exc)

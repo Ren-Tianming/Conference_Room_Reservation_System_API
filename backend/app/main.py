@@ -7,8 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db.session import create_db_and_tables
+from app.services.admin_service import seed_bootstrap_admin
 from app.services.room_service import seed_default_rooms
+
+
+configure_logging(settings.debug)
 
 
 @asynccontextmanager
@@ -16,6 +21,7 @@ async def lifespan(app: FastAPI):
     if settings.auto_create_tables:
         create_db_and_tables()
         seed_default_rooms()
+        seed_bootstrap_admin()
     yield
 
 

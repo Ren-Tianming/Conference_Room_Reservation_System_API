@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.redis_client import room_lock
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingStatus
 from app.models.room import Room
 from app.models.user import User
 from app.schemas.booking import BookingCreate
@@ -15,7 +15,7 @@ def list_my_bookings(db: Session, user_id: int) -> list[Booking]:
     stmt = (
         select(Booking)
         .options(selectinload(Booking.room))
-        .where(Booking.user_id == user_id, Booking.status == 'active')
+        .where(Booking.user_id == user_id, Booking.status == BookingStatus.ACTIVE.value)
         .order_by(Booking.start_time.asc())
     )
     return list(db.execute(stmt).scalars().all())
@@ -34,7 +34,7 @@ def create_booking(db: Session, payload: BookingCreate, current_user: User) -> B
             select(Booking)
             .where(
                 Booking.room_id == payload.room_id,
-                Booking.status == 'active',
+                Booking.status == BookingStatus.ACTIVE.value,
                 Booking.start_time < payload.end_time,
                 Booking.end_time > payload.start_time,
             )
@@ -60,11 +60,11 @@ def create_booking(db: Session, payload: BookingCreate, current_user: User) -> B
 
 
 def cancel_booking(db: Session, booking_id: int, user_id: int) -> None:
-    stmt = select(Booking).where(Booking.id == booking_id, Booking.user_id == user_id, Booking.status == 'active')
+    stmt = select(Booking).where(Booking.id == booking_id, Booking.user_id == user_id, Booking.status == BookingStatus.ACTIVE.value)
     booking = db.execute(stmt).scalar_one_or_none()
     if booking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='予約が見つかりません。')
 
-    booking.status = 'cancelled'
+    booking.status = BookingStatus.CANCELLED.value
     db.add(booking)
     db.commit()

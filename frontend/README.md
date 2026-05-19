@@ -49,7 +49,7 @@ python -m venv .venv
 #### Windows
 
 ```bash
-.venv\Scriptsctivate
+.venv\Scripts\activate
 ```
 
 #### macOS / Linux
@@ -76,6 +76,8 @@ streamlit run app.py
 BACKEND_BASE_URL=http://127.0.0.1:8000/api/v1
 ```
 
+Docker Compose で起動する場合、`docker-compose.yml` が `BACKEND_BASE_URL=http://backend:8000/api/v1` をコンテナ向けに上書きします。
+
 ## 画面でできること
 
 - ユーザー登録
@@ -83,10 +85,16 @@ BACKEND_BASE_URL=http://127.0.0.1:8000/api/v1
 - ログアウト
 - 自分のユーザー情報表示
 - 会議室一覧表示
-- 会議室追加
+- 会議室追加（管理者のみ）
 - 予約作成
 - 自分の予約一覧表示
 - 予約キャンセル
+
+## API Client の挙動
+
+- JSON 以外のレスポンスでもエラーメッセージを表示します。
+- access token が期限切れで `401` が返った場合、refresh token で再発行を試み、成功すれば 1 回だけ元のリクエストを再実行します。
+- refresh / logout は無限リトライを避けるため、自動再試行しません。
 
 ## 補足
 

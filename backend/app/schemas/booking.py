@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -8,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class BookingCreate(BaseModel):
     room_id: int
     title: str = Field(min_length=1, max_length=100)
-    purpose: str | None = Field(default=None, max_length=255)
+    purpose: Optional[str] = Field(default=None, max_length=255)
     attendee_count: int = Field(ge=1, le=500)
     start_time: datetime
     end_time: datetime
@@ -25,7 +26,7 @@ class BookingRead(BaseModel):
 
     id: int
     title: str
-    purpose: str | None
+    purpose: Optional[str]
     attendee_count: int
     start_time: datetime
     end_time: datetime

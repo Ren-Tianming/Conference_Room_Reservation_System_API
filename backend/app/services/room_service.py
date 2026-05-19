@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.redis_client import delete_key, get_json, set_json
@@ -45,7 +46,11 @@ def create_room(db: Session, payload: RoomCreate) -> Room:
         description=payload.description,
     )
     db.add(room)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='同名の会議室が既に存在します。') from exc
     db.refresh(room)
     delete_key(ROOMS_CACHE_KEY)
     return room

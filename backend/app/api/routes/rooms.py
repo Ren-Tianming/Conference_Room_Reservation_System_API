@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_admin_user
 from app.models.user import User
 from app.schemas.room import RoomCreate, RoomRead
 from app.services.room_service import create_room, list_rooms
@@ -21,7 +21,7 @@ def read_rooms(db: Session = Depends(get_db)) -> list[RoomRead]:
 def create_new_room(
     payload: RoomCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin_user),
 ) -> RoomRead:
     room = create_room(db, payload)
     return RoomRead.model_validate(room)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -14,7 +16,7 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     access_token: str
-    refresh_token: str | None = None
+    refresh_token: Optional[str] = None
 
 
 class TokenResponse(BaseModel):

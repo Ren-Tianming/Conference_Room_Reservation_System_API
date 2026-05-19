@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from datetime import timedelta, timezone
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import HTTPException, status
 from jose import JWTError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -16,6 +19,8 @@ from app.schemas.auth import TokenResponse
 from app.schemas.user import UserCreate
 from app.services.user_service import get_user_by_username
 
+logger = logging.getLogger(__name__)
+
 
 def register_user(db: Session, payload: UserCreate) -> User:
     exists = get_user_by_username(db, payload.username)
@@ -24,7 +29,11 @@ def register_user(db: Session, payload: UserCreate) -> User:
 
     user = User(username=payload.username, password_hash=get_password_hash(payload.password))
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='このユーザー名は既に使用されています。') from exc
     db.refresh(user)
     return user
 
@@ -88,17 +97,16 @@ def rotate_refresh_token(db: Session, refresh_token: str) -> TokenResponse:
     return create_access_and_refresh_tokens(db, user)
 
 
-def revoke_tokens(db: Session, *, access_token: str, refresh_token: str | None, user_id: int) -> None:
+def revoke_tokens(db: Session, *, access_token: str, refresh_token: Optional[str], user_id: int) -> None:
     try:
         access_payload = decode_token(access_token)
         access_jti = access_payload.get('jti')
         access_exp = access_payload.get('exp')
         access_user_id = access_payload.get('user_id')
         if access_jti and access_exp and access_user_id == user_id:
-            from datetime import datetime
             blacklist_token(access_jti, datetime.fromtimestamp(access_exp, tz=timezone.utc))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning('Failed to revoke access token for user_id=%s: %s', user_id, exc)
 
     if refresh_token:
         try:
@@ -113,5 +121,5 @@ def revoke_tokens(db: Session, *, access_token: str, refresh_token: str | None, 
                     db.add(stored)
                     blacklist_token(refresh_jti, stored.expires_at)
                     db.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning('Failed to revoke refresh token for user_id=%s: %s', user_id, exc)

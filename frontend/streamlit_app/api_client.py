@@ -27,7 +27,22 @@ class ApiClient:
             headers['Authorization'] = f'Bearer {self.access_token}'
         return headers
 
-    def _request(self, method: str, path: str, json: dict[str, Any] | None = None) -> tuple[bool, Any]:
+    def _decode_response(self, response: requests.Response) -> Any:
+        if not response.content:
+            return {}
+        content_type = response.headers.get('content-type', '')
+        if 'application/json' in content_type:
+            return response.json()
+        return {'detail': response.text or response.reason}
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        json: dict[str, Any] | None = None,
+        *,
+        retry_on_unauthorized: bool = True,
+    ) -> tuple[bool, Any]:
         try:
             response = requests.request(
                 method=method,
@@ -36,10 +51,18 @@ class ApiClient:
                 headers=self._headers(),
                 timeout=TIMEOUT,
             )
-            data = response.json() if response.content else {}
+            data = self._decode_response(response)
             if response.ok:
                 return True, data
+            if response.status_code == 401 and retry_on_unauthorized and path != '/auth/refresh':
+                refreshed, token_data = self.refresh()
+                if refreshed:
+                    self.access_token = token_data.get('access_token')
+                    self.refresh_token = token_data.get('refresh_token')
+                    return self._request(method, path, json, retry_on_unauthorized=False)
             return False, data
+        except ValueError as exc:
+            return False, {'detail': f'レスポンス解析エラー: {exc}'}
         except requests.RequestException as exc:
             return False, {'detail': f'通信エラー: {exc}'}
 
@@ -52,7 +75,7 @@ class ApiClient:
     def refresh(self) -> tuple[bool, Any]:
         if not self.refresh_token:
             return False, {'detail': 'リフレッシュトークンがありません。'}
-        return self._request('POST', '/auth/refresh', {'refresh_token': self.refresh_token})
+        return self._request('POST', '/auth/refresh', {'refresh_token': self.refresh_token}, retry_on_unauthorized=False)
 
     def logout(self) -> tuple[bool, Any]:
         if not self.access_token:
@@ -61,6 +84,7 @@ class ApiClient:
             'POST',
             '/auth/logout',
             {'access_token': self.access_token, 'refresh_token': self.refresh_token},
+            retry_on_unauthorized=False,
         )
 
     def me(self) -> tuple[bool, Any]:

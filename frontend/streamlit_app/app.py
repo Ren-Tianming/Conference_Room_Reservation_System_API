@@ -41,7 +41,7 @@ def show_result(success: bool, data: dict | list | str) -> None:
 
 
 st.title('📅 会議室予約システム')
-st.caption('FastAPI + PostgreSQL/SQLite + Redis + Streamlit')
+st.caption('FastAPI + MySQL + Redis + Streamlit')
 
 with st.sidebar:
     st.subheader('認証')
@@ -93,7 +93,7 @@ with col1:
         ok, data = client.me()
         show_result(ok, data)
 
-    st.subheader('会議室追加')
+    st.subheader('会議室追加（管理者のみ）')
     with st.form('create_room_form'):
         room_name = st.text_input('会議室名')
         capacity = st.number_input('定員', min_value=1, max_value=500, value=6)
@@ -117,7 +117,7 @@ st.divider()
 
 st.subheader('予約作成')
 with st.form('create_booking_form'):
-    room_id = st.number_input('会議室 ID', min_value=1, step=1, value=1)
+    room_id = st.number_input('会議室 ID（一覧から選択した ID）', min_value=1, step=1, value=1)
     title = st.text_input('予約タイトル', value='定例ミーティング')
     purpose = st.text_input('利用目的', value='進捗確認')
     attendee_count = st.number_input('参加人数', min_value=1, max_value=500, value=2)
