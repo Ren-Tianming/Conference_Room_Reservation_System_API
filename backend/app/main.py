@@ -3,17 +3,24 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.exceptions import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 from app.core.logging import configure_logging
 from app.db.session import create_db_and_tables
 from app.services.admin_service import seed_bootstrap_admin
 from app.services.room_service import seed_default_rooms
 
 
-configure_logging(settings.debug)
+configure_logging(settings.debug, settings.log_level)
 
 
 @asynccontextmanager
@@ -31,9 +38,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
