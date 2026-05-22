@@ -45,6 +45,30 @@ def test_user_registration_login_and_me(client: TestClient) -> None:
     assert body['role'] == UserRole.USER.value
 
 
+def test_user_registration_returns_created_user(client: TestClient) -> None:
+    response = client.post('/api/v1/auth/register', json={'username': 'new-user', 'password': 'password123'})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body['username'] == 'new-user'
+    assert body['role'] == UserRole.USER.value
+    assert 'password' not in body
+    assert 'password_hash' not in body
+
+
+def test_user_login_returns_access_and_refresh_tokens(client: TestClient) -> None:
+    created = client.post('/api/v1/auth/register', json={'username': 'login-user', 'password': 'password123'})
+    assert created.status_code == 201
+
+    response = client.post('/api/v1/auth/login', json={'username': 'login-user', 'password': 'password123'})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['token_type'] == 'bearer'
+    assert body['access_token']
+    assert body['refresh_token']
+
+
 def test_password_is_hashed_and_access_token_uses_configured_claims(client: TestClient) -> None:
     password = 'password123'
     tokens = register_and_login(client, username='secure-user')
@@ -107,7 +131,7 @@ def test_token_with_wrong_audience_is_rejected(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_room_creation_requires_admin(client: TestClient) -> None:
+def test_room_creation_requires_admin_and_created_room_is_listed(client: TestClient) -> None:
     tokens = register_and_login(client)
 
     denied = client.post(
@@ -125,6 +149,10 @@ def test_room_creation_requires_admin(client: TestClient) -> None:
     )
     assert created.status_code == 201
     assert created.json()['name'] == 'Admin-Room'
+
+    listed = client.get('/api/v1/rooms')
+    assert listed.status_code == 200
+    assert any(room['name'] == 'Admin-Room' for room in listed.json())
 
 
 def test_booking_conflict_and_cancel_flow(client: TestClient) -> None:
