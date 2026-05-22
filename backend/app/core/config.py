@@ -17,6 +17,8 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-this-to-a-strong-secret"
     algorithm: str = "HS256"
+    jwt_issuer: str = "conference-room-api"
+    jwt_audience: str = "conference-room-users"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     bootstrap_admin_username: Optional[str] = None
@@ -47,6 +49,22 @@ class Settings(BaseSettings):
             raise ValueError(f"LOG_LEVEL must be one of: {', '.join(sorted(allowed))}.")
         return normalized
 
+    @field_validator("algorithm")
+    @classmethod
+    def validate_algorithm(cls, value: str) -> str:
+        allowed = {"HS256", "HS384", "HS512"}
+        normalized = value.upper()
+        if normalized not in allowed:
+            raise ValueError(f"ALGORITHM must be one of: {', '.join(sorted(allowed))}.")
+        return normalized
+
+    @field_validator("access_token_expire_minutes", "refresh_token_expire_days")
+    @classmethod
+    def validate_positive_expiry(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Token expiration values must be positive.")
+        return value
+
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
         if self.env.lower() in {"prod", "production"}:
@@ -56,6 +74,10 @@ class Settings(BaseSettings):
                 raise ValueError("SECRET_KEY must be changed in production.")
             if len(self.secret_key) < 32:
                 raise ValueError("SECRET_KEY must be at least 32 characters in production.")
+            if not self.jwt_issuer.strip():
+                raise ValueError("JWT_ISSUER must be set in production.")
+            if not self.jwt_audience.strip():
+                raise ValueError("JWT_AUDIENCE must be set in production.")
             if "*" in self.cors_origin_list:
                 raise ValueError("CORS_ORIGINS must not contain '*' in production.")
             if self.auto_create_tables:

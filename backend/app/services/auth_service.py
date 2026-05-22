@@ -35,15 +35,19 @@ def register_user(db: Session, payload: UserCreate) -> User:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='このユーザー名は既に使用されています。') from exc
     db.refresh(user)
+    logger.info("User registered: user_id=%s username=%s", user.id, user.username)
     return user
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User:
     user = get_user_by_username(db, username)
     if user is None or not verify_password(password, user.password_hash):
+        logger.warning("Failed login attempt for username=%s", username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザー名またはパスワードが正しくありません。')
     if not user.is_active:
+        logger.warning("Inactive user login attempt: user_id=%s username=%s", user.id, user.username)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='無効なユーザーです。')
+    logger.info("User authenticated: user_id=%s username=%s", user.id, user.username)
     return user
 
 
