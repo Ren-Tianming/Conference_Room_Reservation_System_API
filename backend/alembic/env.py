@@ -10,7 +10,7 @@ from app.db.base import Base
 from app.models import booking, refresh_token, room, user  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url_string)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

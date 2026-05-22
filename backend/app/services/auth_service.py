@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException, status
 from jose import JWTError
-from sqlalchemy import select
+from redis.exceptions import RedisError
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.redis_client import blacklist_token
+from app.core.redis_client import blacklist_token, get_redis_client
 from app.core.security import create_token, decode_token, get_password_hash, verify_password
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
@@ -20,6 +22,61 @@ from app.schemas.user import UserCreate
 from app.services.user_service import get_user_by_username
 
 logger = logging.getLogger(__name__)
+_failed_login_attempts: dict[str, tuple[int, float]] = {}
+
+
+def _rate_limit_key(username: str) -> str:
+    return f"auth:failed-login:{username.lower()}"
+
+
+def _is_login_rate_limited(username: str) -> bool:
+    key = _rate_limit_key(username)
+    client = get_redis_client()
+    if client is not None:
+        try:
+            count = client.get(key)
+            return count is not None and int(count) >= settings.auth_rate_limit_max_attempts
+        except RedisError as exc:
+            logger.warning("Failed to check login rate limit for username=%s: %s", username, exc)
+
+    now = time.monotonic()
+    count, expires_at = _failed_login_attempts.get(key, (0, 0))
+    if now >= expires_at:
+        _failed_login_attempts.pop(key, None)
+        return False
+    return count >= settings.auth_rate_limit_max_attempts
+
+
+def _record_failed_login(username: str) -> None:
+    key = _rate_limit_key(username)
+    client = get_redis_client()
+    if client is not None:
+        try:
+            count = client.incr(key)
+            if count == 1:
+                client.expire(key, settings.auth_rate_limit_window_seconds)
+            return
+        except RedisError as exc:
+            logger.warning("Failed to record login rate limit for username=%s: %s", username, exc)
+
+    now = time.monotonic()
+    count, expires_at = _failed_login_attempts.get(key, (0, now + settings.auth_rate_limit_window_seconds))
+    if now >= expires_at:
+        count = 0
+        expires_at = now + settings.auth_rate_limit_window_seconds
+    _failed_login_attempts[key] = (count + 1, expires_at)
+
+
+def _clear_failed_logins(username: str) -> None:
+    key = _rate_limit_key(username)
+    client = get_redis_client()
+    if client is not None:
+        try:
+            client.delete(key)
+            return
+        except RedisError as exc:
+            logger.warning("Failed to clear login rate limit for username=%s: %s", username, exc)
+    _failed_login_attempts.pop(key, None)
 
 
 def register_user(db: Session, payload: UserCreate) -> User:
@@ -40,13 +97,19 @@ def register_user(db: Session, payload: UserCreate) -> User:
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User:
+    if _is_login_rate_limited(username):
+        logger.warning("Login rate limit exceeded for username=%s", username)
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='ログイン試行回数が多すぎます。しばらくしてから再試行してください。')
+
     user = get_user_by_username(db, username)
     if user is None or not verify_password(password, user.password_hash):
+        _record_failed_login(username)
         logger.warning("Failed login attempt for username=%s", username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザー名またはパスワードが正しくありません。')
     if not user.is_active:
         logger.warning("Inactive user login attempt: user_id=%s username=%s", user.id, user.username)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='無効なユーザーです。')
+    _clear_failed_logins(username)
     logger.info("User authenticated: user_id=%s username=%s", user.id, user.username)
     return user
 
@@ -84,14 +147,23 @@ def rotate_refresh_token(db: Session, refresh_token: str) -> TokenResponse:
     if user_id is None or jti is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='トークン情報が不正です。')
 
-    stmt = select(RefreshToken).where(RefreshToken.token_jti == jti, RefreshToken.user_id == user_id)
-    stored = db.execute(stmt).scalar_one_or_none()
-    if stored is None or stored.revoked:
+    revoke_stmt = (
+        update(RefreshToken)
+        .where(
+            RefreshToken.token_jti == jti,
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked.is_(False),
+        )
+        .values(revoked=True)
+    )
+    result = db.execute(revoke_stmt)
+    if result.rowcount != 1:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='このリフレッシュトークンは使用できません。')
 
-    stored.revoked = True
+    stmt = select(RefreshToken).where(RefreshToken.token_jti == jti, RefreshToken.user_id == user_id)
+    stored = db.execute(stmt).scalar_one()
     blacklist_token(jti, stored.expires_at)
-    db.add(stored)
     db.commit()
 
     user = db.get(User, user_id)

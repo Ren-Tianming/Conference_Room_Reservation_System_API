@@ -7,11 +7,12 @@ from app.core.config import settings
 from app.db.base import Base
 
 connect_args = {}
-if settings.database_url.startswith('sqlite'):
+database_url = settings.sqlalchemy_database_url
+if settings.sqlalchemy_database_url_string.startswith('sqlite'):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    settings.database_url,
+    database_url,
     connect_args=connect_args,
     future=True,
     pool_pre_ping=True,

@@ -127,14 +127,25 @@ uvicorn app.main:app --reload
 APP_NAME=Conference Room Reservation System API
 ENV=dev
 DEBUG=true
+LOG_LEVEL=INFO
 API_V1_PREFIX=/api/v1
 SECRET_KEY=change-this-to-a-strong-secret
 ALGORITHM=HS256
+JWT_ISSUER=conference-room-api
+JWT_AUDIENCE=conference-room-users
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 # BOOTSTRAP_ADMIN_USERNAME=admin
 # BOOTSTRAP_ADMIN_PASSWORD=change-this-admin-password
-DATABASE_URL=mysql+pymysql://conference_user:conference_password@127.0.0.1:3306/conference_room?charset=utf8mb4
+# DATABASE_URL を指定した場合は以下の DATABASE_* より優先されます。
+# DATABASE_URL=sqlite:///./local.db
+DATABASE_DRIVER=mysql+pymysql
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=3306
+DATABASE_NAME=conference_room
+DATABASE_USER=conference_user
+DATABASE_PASSWORD=conference_password
+DATABASE_QUERY=charset=utf8mb4
 REDIS_URL=redis://localhost:6379/0
 REQUIRE_REDIS_FOR_LOCKS=false
 REQUIRE_REDIS_FOR_TOKEN_BLACKLIST=false
@@ -152,7 +163,7 @@ docker build -t conference-room-backend .
 
 ### run
 
-単体で起動する場合は、MySQL / Redis に接続できる `DATABASE_URL` と `REDIS_URL` を指定してください。
+単体で起動する場合は、MySQL / Redis に接続できる `DATABASE_*` または `DATABASE_URL` と `REDIS_URL` を指定してください。
 
 ```bash
 docker run --env-file .env -p 8000:8000 conference-room-backend
@@ -161,10 +172,12 @@ docker run --env-file .env -p 8000:8000 conference-room-backend
 Docker Compose で起動する場合は、リポジトリルートで以下を実行します。
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
-Compose ではバックエンドコンテナ向けに `DATABASE_URL=mysql+pymysql://conference_user:conference_password@db:3306/conference_room?charset=utf8mb4` と `REDIS_URL=redis://redis:6379/0` を上書きします。
+Compose ではリポジトリルートの `.env` から MySQL / JWT / CORS 設定を読み込み、バックエンドコンテナ向けに `DATABASE_*` と `REDIS_URL` を設定します。
+バックエンドコンテナは起動時に `alembic upgrade head` を実行してから FastAPI を起動します。
 
 ## Alembic
 

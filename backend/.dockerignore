@@ -1,0 +1,9 @@
+.env
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.db
+.DS_Store
+tests
+Conferenceroom_Reservation_System.code-workspace

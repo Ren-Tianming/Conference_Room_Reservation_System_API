@@ -69,6 +69,19 @@ def test_user_login_returns_access_and_refresh_tokens(client: TestClient) -> Non
     assert body['refresh_token']
 
 
+def test_login_rate_limit_after_repeated_failures(client: TestClient) -> None:
+    created = client.post('/api/v1/auth/register', json={'username': 'limited-user', 'password': 'password123'})
+    assert created.status_code == 201
+
+    for _ in range(settings.auth_rate_limit_max_attempts):
+        response = client.post('/api/v1/auth/login', json={'username': 'limited-user', 'password': 'wrong-password'})
+        assert response.status_code == 401
+
+    limited = client.post('/api/v1/auth/login', json={'username': 'limited-user', 'password': 'wrong-password'})
+
+    assert limited.status_code == 429
+
+
 def test_password_is_hashed_and_access_token_uses_configured_claims(client: TestClient) -> None:
     password = 'password123'
     tokens = register_and_login(client, username='secure-user')

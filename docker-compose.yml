@@ -1,15 +1,13 @@
-version: "3.9"
-
 services:
   db:
     image: mysql:8.4
     container_name: conference_room_mysql
     environment:
-      MYSQL_DATABASE: conference_room
-      MYSQL_USER: conference_user
-      MYSQL_PASSWORD: conference_password
-      MYSQL_ROOT_PASSWORD: root_password
-      TZ: Asia/Tokyo
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      TZ: ${TZ:-Asia/Tokyo}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -18,7 +16,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u conference_user -pconference_password --silent"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -39,11 +37,34 @@ services:
     build:
       context: ./backend
     container_name: conference_room_backend
-    env_file:
-      - ./backend/.env
     environment:
-      DATABASE_URL: mysql+pymysql://conference_user:conference_password@db:3306/conference_room?charset=utf8mb4
+      APP_NAME: ${APP_NAME:-Conference Room Reservation System API}
+      ENV: ${ENV:-dev}
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      JWT_ISSUER: ${JWT_ISSUER:-conference-room-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-conference-room-users}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      AUTH_RATE_LIMIT_MAX_ATTEMPTS: ${AUTH_RATE_LIMIT_MAX_ATTEMPTS:-5}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      DATABASE_DRIVER: mysql+pymysql
+      DATABASE_HOST: db
+      DATABASE_PORT: 3306
+      DATABASE_NAME: ${MYSQL_DATABASE}
+      DATABASE_USER: ${MYSQL_USER}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      DATABASE_QUERY: charset=utf8mb4
       REDIS_URL: redis://redis:6379/0
+      AUTO_CREATE_TABLES: ${AUTO_CREATE_TABLES:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8501,http://127.0.0.1:8501}
+      REQUIRE_REDIS_FOR_LOCKS: ${REQUIRE_REDIS_FOR_LOCKS:-false}
+      REQUIRE_REDIS_FOR_TOKEN_BLACKLIST: ${REQUIRE_REDIS_FOR_TOKEN_BLACKLIST:-false}
     ports:
       - "8000:8000"
     depends_on:
@@ -51,19 +72,24 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: ./frontend/streamlit_app
     container_name: conference_room_frontend
-    env_file:
-      - ./frontend/streamlit_app/.env
     environment:
       BACKEND_BASE_URL: http://backend:8000/api/v1
     ports:
       - "8501:8501"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   mysql_data:
