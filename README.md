@@ -1,4 +1,4 @@
-# Conference Room Reservation System API
+# Conferenceroom_Reservation_System
 
 FastAPI を用いた会議室予約システム API と、Streamlit を用いた簡易フロントエンドを含むポートフォリオ向けプロジェクトです。
 JWT 認証、リフレッシュトークン、管理者権限、予約競合チェック、Redis キャッシュ、Redis ロック、Alembic マイグレーション、Docker Compose、テストを備えた構成にしています。
