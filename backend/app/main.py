@@ -20,7 +20,7 @@ from app.services.admin_service import seed_bootstrap_admin
 from app.services.room_service import seed_default_rooms
 
 
-configure_logging(settings.debug, settings.log_level)
+configure_logging(settings.debug, settings.log_levelConferenceroom_Reservation_SystemConferenceroom_Reservation_System)
 
 
 @asynccontextmanager
