@@ -7,7 +7,6 @@ from app.db.session import engine
 
 def test_alembic_migration_creates_expected_tables(client) -> None:
     inspector = inspect(engine)
-
     assert set(inspector.get_table_names()) >= {
         'users',
         'rooms',
@@ -15,7 +14,6 @@ def test_alembic_migration_creates_expected_tables(client) -> None:
         'refresh_tokens',
         'alembic_version',
     }
-
     assert {column['name'] for column in inspector.get_columns('users')} >= {
         'id',
         'username',

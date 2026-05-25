@@ -1,0 +1,48 @@
+services:
+  test-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: conference_room_test
+      MYSQL_USER: conference_test_user
+      MYSQL_PASSWORD: conference_test_password
+      MYSQL_ROOT_PASSWORD: conference_test_root_password
+      TZ: Asia/Tokyo
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  test-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  integration-tests:
+    build:
+      context: ./backend
+    command: ["pytest", "-q", "tests/integration"]
+    volumes:
+      - ./backend/tests:/app/tests:ro
+    environment:
+      ENV: test
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      SECRET_KEY: integration-test-secret-key
+      AUTO_CREATE_TABLES: "false"
+      MYSQL_TEST_DATABASE_URL: mysql+pymysql://conference_test_user:conference_test_password@test-db:3306/conference_room_test?charset=utf8mb4
+      REDIS_TEST_URL: redis://test-redis:6379/15
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy

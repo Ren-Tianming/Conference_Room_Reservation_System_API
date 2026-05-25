@@ -32,8 +32,13 @@ backend/
 │     └─ 20260513_0001_initial_schema.py
 ├─ tests/
 │  ├─ conftest.py
-│  ├─ test_auth_rooms_bookings.py
-│  └─ test_health.py
+│  ├─ unit/
+│  ├─ integration/
+│  │  ├─ test_mysql_booking_conflict.py
+│  │  ├─ test_refresh_token_rotation_mysql.py
+│  │  ├─ test_redis_lock_required.py
+│  │  └─ test_mysql_migrations.py
+│  └─ e2e/
 └─ app/
    ├─ main.py
    ├─ api/
@@ -199,11 +204,28 @@ alembic upgrade head
 
 ## テスト
 
+SQLite を使う高速な API / 設定テスト:
+
 ```bash
-pytest -q
+pytest -q tests/unit
 ```
 
-テストでは `tests/conftest.py` により SQLite ファイル DB を使用し、各テストでテーブルを作り直します。標準実行環境は MySQL です。
+MySQL のロックとトランザクション、Redis ロック、refresh token の並行ローテーション、Alembic migration を検証する統合テストは、リポジトリルートで専用 Compose スタックを使って実行します。
+
+```bash
+docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from integration-tests
+docker compose -f docker-compose.test.yml down
+```
+
+手元の専用テストサービスを使用する場合:
+
+```bash
+MYSQL_TEST_DATABASE_URL='mysql+pymysql://conference_test_user:conference_test_password@127.0.0.1:3306/conference_room_test?charset=utf8mb4' \
+REDIS_TEST_URL='redis://127.0.0.1:6379/15' \
+pytest -q tests/integration
+```
+
+`MYSQL_TEST_DATABASE_URL` のデータベース名には `test` を含めてください。統合テストは各ケースの前にその schema を migration で作り直します。
 
 ## API エンドポイント
 

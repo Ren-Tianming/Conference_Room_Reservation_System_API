@@ -15,9 +15,7 @@ def test_database_url_builder_escapes_special_password_characters() -> None:
         database_password='p@ss:w/rd#?',
         database_query='charset=utf8mb4',
     )
-
     url = settings.sqlalchemy_database_url_string
-
     assert 'p%40ss%3Aw%2Frd%23%3F' in url
     assert url.startswith('mysql+pymysql://conference_user:')
     assert url.endswith('@db:3306/conference_room?charset=utf8mb4')
@@ -33,7 +31,6 @@ def test_production_requires_redis_fail_closed_settings() -> None:
             require_redis_for_locks=False,
             require_redis_for_token_blacklist=True,
         )
-
     with pytest.raises(ValidationError):
         Settings(
             env='production',
