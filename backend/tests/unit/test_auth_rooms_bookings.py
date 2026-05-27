@@ -11,7 +11,9 @@ from app.core.security import decode_token
 from app.db.session import SessionLocal
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
+from app.schemas.room import RoomCreate, RoomRead
 from app.services.auth_service import cleanup_expired_refresh_tokens, hash_refresh_token
+from app.services import room_service
 
 
 def register_and_login(client: TestClient, username: str = 'alice') -> dict[str, str]:
@@ -265,6 +267,29 @@ def test_room_creation_requires_admin_and_created_room_is_listed(client: TestCli
     listed = client.get('/api/v1/rooms')
     assert listed.status_code == 200
     assert any(room['name'] == 'Admin-Room' for room in listed.json())
+
+
+def test_room_service_returns_room_read_for_database_and_cache_paths(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    db = SessionLocal()
+    try:
+        room_service.create_room(
+            db,
+            RoomCreate(name='Schema-Room', capacity=6, location='HQ', description='stable type'),
+        )
+        monkeypatch.setattr(room_service, 'get_json', lambda _key: None)
+        from_database = room_service.list_rooms(db)
+        assert all(isinstance(room, RoomRead) for room in from_database)
+
+        cached_payload = [room.model_dump(mode='json') for room in from_database]
+        monkeypatch.setattr(room_service, 'get_json', lambda _key: cached_payload)
+        from_cache = room_service.list_rooms(db)
+        assert all(isinstance(room, RoomRead) for room in from_cache)
+        assert from_cache == from_database
+    finally:
+        db.close()
 
 
 def test_booking_conflict_and_cancel_flow(client: TestClient) -> None:

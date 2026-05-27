@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Union
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.observability import render_prometheus_metrics
 from app.core.redis_client import get_redis_client
 from app.db.session import SessionLocal
 
@@ -16,6 +17,14 @@ router = APIRouter()
 @router.get('/health')
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get('/metrics', include_in_schema=False)
+def metrics() -> Response:
+    return Response(
+        content=render_prometheus_metrics(),
+        media_type='text/plain; version=0.0.4',
+    )
 
 
 @router.get('/ready', response_model=None)

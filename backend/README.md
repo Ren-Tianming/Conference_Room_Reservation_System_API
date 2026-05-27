@@ -274,6 +274,7 @@ pip-audit -r frontend/streamlit_app/requirements.txt
 
 - `GET /api/v1/health`
 - `GET /api/v1/ready`（DB または必須 Redis 障害時は `503`。任意 Redis 障害時は `200` / `degraded`）
+- `GET /api/v1/metrics`（Prometheus text format の HTTP リクエスト数 / 処理時間）
 
 ## データモデル概要
 
@@ -324,13 +325,15 @@ pip-audit -r frontend/streamlit_app/requirements.txt
 ## 設計メモ
 
 - `api/`: ルーティングと依存関係
-- `core/`: 設定、セキュリティ、Redis、ログ
+- `core/`: 設定、セキュリティ、Redis、JSON ログ、Prometheus 形式の可観測性
 - `db/`: DB 接続と Base 定義
 - `models/`: SQLAlchemy モデル
 - `schemas/`: Pydantic スキーマ
 - `services/`: ビジネスロジック
 
 MySQL 接続は `READ COMMITTED` で実行し、予約作成時は対象の `rooms` 行を `SELECT ... FOR UPDATE` でロックして、同一会議室の重複判定を直列化します。期限切れの refresh session は token 発行時と `REFRESH_TOKEN_CLEANUP_INTERVAL_SECONDS` 間隔のバックグラウンド処理で削除されます。
+
+各 HTTP 応答には `X-Request-ID` が含まれ、ログは JSON 形式で `method`、`path`、`status_code`、`duration_ms` を記録します。ログイン失敗、予約作成 / キャンセル、管理者による会議室作成は監査対象イベントとして出力されます。
 
 ## 運用上の注意
 

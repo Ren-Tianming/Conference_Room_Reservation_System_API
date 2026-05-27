@@ -34,6 +34,9 @@ def seed_bootstrap_admin() -> None:
         )
         db.add(admin)
         db.commit()
-        logger.info('Bootstrap admin user was created: %s', settings.bootstrap_admin_username)
+        logger.info(
+            'Bootstrap administrator created.',
+            extra={'event': 'bootstrap_admin_created', 'user_id': admin.id, 'username': admin.username},
+        )
     finally:
         db.close()

@@ -7,31 +7,21 @@ from sqlalchemy.orm import Session
 
 from app.core.redis_client import delete_key, get_json, set_json
 from app.models.room import Room
-from app.schemas.room import RoomCreate
+from app.schemas.room import RoomCreate, RoomRead
 
 ROOMS_CACHE_KEY = 'rooms:all'
 
 
-def list_rooms(db: Session) -> list[Room] | list[dict]:
+def list_rooms(db: Session) -> list[RoomRead]:
     cached = get_json(ROOMS_CACHE_KEY)
     if cached is not None:
-        return cached
+        return [RoomRead.model_validate(room) for room in cached]
 
     stmt = select(Room).order_by(Room.id.asc())
     rooms = list(db.execute(stmt).scalars().all())
-    payload = [
-        {
-            'id': room.id,
-            'name': room.name,
-            'capacity': room.capacity,
-            'location': room.location,
-            'description': room.description,
-            'created_at': room.created_at.isoformat(),
-        }
-        for room in rooms
-    ]
-    set_json(ROOMS_CACHE_KEY, payload, ttl_seconds=120)
-    return rooms
+    result = [RoomRead.model_validate(room) for room in rooms]
+    set_json(ROOMS_CACHE_KEY, [room.model_dump(mode='json') for room in result], ttl_seconds=120)
+    return result
 
 
 def create_room(db: Session, payload: RoomCreate) -> Room:

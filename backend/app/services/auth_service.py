@@ -130,19 +130,31 @@ def register_user(db: Session, payload: UserCreate) -> User:
 
 def authenticate_user(db: Session, username: str, password: str) -> User:
     if _is_login_rate_limited(username):
-        logger.warning("Login rate limit exceeded for username=%s", username)
+        logger.warning(
+            'Login rate limit exceeded.',
+            extra={'event': 'login_rate_limited', 'username': username},
+        )
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='ログイン試行回数が多すぎます。しばらくしてから再試行してください。')
 
     user = get_user_by_username(db, username)
     if user is None or not verify_password(password, user.password_hash):
         _record_failed_login(username)
-        logger.warning("Failed login attempt for username=%s", username)
+        logger.warning(
+            'Login failed.',
+            extra={'event': 'login_failed', 'username': username},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザー名またはパスワードが正しくありません。')
     if not user.is_active:
-        logger.warning("Inactive user login attempt: user_id=%s username=%s", user.id, user.username)
+        logger.warning(
+            'Inactive user login attempt.',
+            extra={'event': 'login_inactive_user', 'user_id': user.id, 'username': user.username},
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='無効なユーザーです。')
     _clear_failed_logins(username)
-    logger.info("User authenticated: user_id=%s username=%s", user.id, user.username)
+    logger.info(
+        'User authenticated.',
+        extra={'event': 'login_succeeded', 'user_id': user.id, 'username': user.username},
+    )
     return user
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -9,6 +11,8 @@ from app.models.booking import Booking, BookingStatus
 from app.models.room import Room
 from app.models.user import User
 from app.schemas.booking import BookingCreate
+
+logger = logging.getLogger(__name__)
 
 
 def list_my_bookings(db: Session, user_id: int) -> list[Booking]:
@@ -57,6 +61,15 @@ def create_booking(db: Session, payload: BookingCreate, current_user: User) -> B
         db.add(booking)
         db.commit()
         db.refresh(booking)
+        logger.info(
+            'Booking created.',
+            extra={
+                'event': 'booking_created',
+                'user_id': current_user.id,
+                'room_id': payload.room_id,
+                'booking_id': booking.id,
+            },
+        )
         return booking
 
 
@@ -69,3 +82,12 @@ def cancel_booking(db: Session, booking_id: int, user_id: int) -> None:
     booking.status = BookingStatus.CANCELLED.value
     db.add(booking)
     db.commit()
+    logger.info(
+        'Booking cancelled.',
+        extra={
+            'event': 'booking_cancelled',
+            'user_id': user_id,
+            'room_id': booking.room_id,
+            'booking_id': booking.id,
+        },
+    )
