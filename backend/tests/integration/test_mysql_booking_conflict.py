@@ -6,7 +6,7 @@ from threading import Barrier
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.db.session import SessionLocal
 from app.main import app
@@ -14,6 +14,15 @@ from app.models.booking import Booking, BookingStatus
 from tests.integration.helpers import auth_header, create_room, promote_to_admin, register_and_login
 
 pytestmark = pytest.mark.integration
+
+
+def test_mysql_uses_read_committed_isolation(client: TestClient) -> None:
+    db = SessionLocal()
+    try:
+        isolation_level = db.execute(text('SELECT @@transaction_isolation')).scalar_one()
+        assert isolation_level.upper().replace('-', ' ') == 'READ COMMITTED'
+    finally:
+        db.close()
 
 
 def test_concurrent_overlapping_bookings_allow_only_one_commit(client: TestClient) -> None:

@@ -85,17 +85,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f('ix_refresh_tokens_user_id'), table_name='refresh_tokens')
-    op.drop_index(op.f('ix_refresh_tokens_token_jti'), table_name='refresh_tokens')
     op.drop_table('refresh_tokens')
-    op.drop_index('ix_bookings_room_status_time_range', table_name='bookings')
-    op.drop_index(op.f('ix_bookings_room_id'), table_name='bookings')
-    op.drop_index(op.f('ix_bookings_user_id'), table_name='bookings')
-    op.drop_index(op.f('ix_bookings_end_time'), table_name='bookings')
-    op.drop_index(op.f('ix_bookings_start_time'), table_name='bookings')
     op.drop_table('bookings')
-    op.drop_index(op.f('ix_rooms_name'), table_name='rooms')
     op.drop_table('rooms')
-    op.drop_index(op.f('ix_users_role'), table_name='users')
-    op.drop_index(op.f('ix_users_username'), table_name='users')
     op.drop_table('users')

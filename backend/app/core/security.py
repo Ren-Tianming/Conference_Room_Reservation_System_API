@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from jose import jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -38,7 +38,7 @@ def create_token(*, user_id: int, token_type: str, expires_delta: timedelta) -> 
     return encoded, jti, expire
 
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict[str, Any]:
     return jwt.decode(
         token,
         settings.secret_key,

@@ -83,7 +83,7 @@ class ApiClient:
         return self._request(
             'POST',
             '/auth/logout',
-            {'access_token': self.access_token, 'refresh_token': self.refresh_token},
+            {'refresh_token': self.refresh_token},
             retry_on_unauthorized=False,
         )
 

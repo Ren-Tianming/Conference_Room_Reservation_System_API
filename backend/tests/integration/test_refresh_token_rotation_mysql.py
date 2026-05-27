@@ -12,6 +12,7 @@ from app.core.security import decode_token
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.refresh_token import RefreshToken
+from app.services.auth_service import hash_refresh_token
 from tests.integration.helpers import register_and_login
 
 pytestmark = pytest.mark.integration
@@ -39,6 +40,7 @@ def test_refresh_token_can_be_rotated_only_once_under_concurrency(client: TestCl
         original = db.scalar(select(RefreshToken).where(RefreshToken.token_jti == original_jti))
         assert original is not None
         assert original.revoked is True
+        assert original.token_hash == hash_refresh_token(refresh_token)
     finally:
         db.close()
 

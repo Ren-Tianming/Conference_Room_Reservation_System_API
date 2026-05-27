@@ -4,7 +4,7 @@ import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Iterator, Optional, Union, cast
 
 from fastapi import HTTPException, status
 from redis import Redis
@@ -55,7 +55,7 @@ def get_json(key: str) -> Optional[Any]:
     if client is None:
         return None
     try:
-        value = client.get(key)
+        value = cast(Optional[str], client.get(key))
         if value is None:
             return None
         return json.loads(value)
@@ -80,6 +80,8 @@ def blacklist_token(jti: str, expires_at: datetime) -> None:
         if settings.require_redis_for_token_blacklist:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Redis が利用できないためトークンを無効化できません。')
         return
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     ttl = max(int((expires_at - datetime.now(timezone.utc)).total_seconds()), 1)
     try:
         client.setex(f"blacklist:{jti}", ttl, "1")

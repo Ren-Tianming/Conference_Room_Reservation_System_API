@@ -22,14 +22,15 @@ def list_my_bookings(db: Session, user_id: int) -> list[Booking]:
 
 
 def create_booking(db: Session, payload: BookingCreate, current_user: User) -> Booking:
-    room = db.get(Room, payload.room_id)
-    if room is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='会議室が存在しません。')
-
-    if payload.attendee_count > room.capacity:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='参加人数が会議室の定員を超えています。')
-
     with room_lock(payload.room_id):
+        room_stmt = select(Room).where(Room.id == payload.room_id).with_for_update()
+        room = db.execute(room_stmt).scalar_one_or_none()
+        if room is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='会議室が存在しません。')
+
+        if payload.attendee_count > room.capacity:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='参加人数が会議室の定員を超えています。')
+
         conflict_stmt = (
             select(Booking)
             .where(

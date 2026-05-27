@@ -37,7 +37,7 @@ services:
       ENV: test
       DEBUG: "false"
       LOG_LEVEL: INFO
-      SECRET_KEY: integration-test-secret-key
+      SECRET_KEY: integration-test-secret-key-with-at-least-32-characters
       AUTO_CREATE_TABLES: "false"
       MYSQL_TEST_DATABASE_URL: mysql+pymysql://conference_test_user:conference_test_password@test-db:3306/conference_room_test?charset=utf8mb4
       REDIS_TEST_URL: redis://test-redis:6379/15

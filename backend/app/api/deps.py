@@ -4,7 +4,7 @@ from typing import Generator, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.core.redis_client import is_token_blacklisted
@@ -33,7 +33,7 @@ def get_current_user(
     token = credentials.credentials
     try:
         payload = decode_token(token)
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="無効なトークンです。") from exc
 
     if payload.get("type") != "access":

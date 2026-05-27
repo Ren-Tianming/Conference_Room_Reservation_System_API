@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -17,10 +18,17 @@ from app.core.exceptions import (
 from app.core.logging import configure_logging
 from app.db.session import create_db_and_tables
 from app.services.admin_service import seed_bootstrap_admin
+from app.services.auth_service import cleanup_expired_refresh_tokens
 from app.services.room_service import seed_default_rooms
 
 
 configure_logging(settings.debug, settings.log_level)
+
+
+async def remove_expired_refresh_tokens_periodically() -> None:
+    while True:
+        await asyncio.sleep(settings.refresh_token_cleanup_interval_seconds)
+        await asyncio.to_thread(cleanup_expired_refresh_tokens)
 
 
 @asynccontextmanager
@@ -29,7 +37,13 @@ async def lifespan(app: FastAPI):
         create_db_and_tables()
         seed_default_rooms()
         seed_bootstrap_admin()
-    yield
+    cleanup_task = asyncio.create_task(remove_expired_refresh_tokens_periodically())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
 
 
 app = FastAPI(
@@ -38,8 +52,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
+app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 app.add_middleware(

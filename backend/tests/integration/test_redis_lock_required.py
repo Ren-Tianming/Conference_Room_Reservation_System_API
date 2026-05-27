@@ -14,8 +14,20 @@ pytestmark = pytest.mark.integration
 def test_ready_uses_running_redis_service(client: TestClient) -> None:
     response = client.get('/api/v1/ready')
     assert response.status_code == 200
-    assert response.json() == {'database': 'ok', 'redis': 'ok'}
+    assert response.json() == {'status': 'ready', 'database': 'ok', 'redis': 'ok'}
     assert get_redis_client() is not None
+
+
+def test_ready_returns_503_when_required_redis_is_unavailable(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr('app.api.routes.health.get_redis_client', lambda: None)
+
+    response = client.get('/api/v1/ready')
+
+    assert response.status_code == 503
+    assert response.json() == {'status': 'not_ready', 'database': 'ok', 'redis': 'unavailable'}
 
 
 def test_booking_fails_closed_when_required_redis_lock_is_unavailable(

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     jwt_audience: str = "conference-room-users"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    refresh_token_cleanup_interval_seconds: int = 3600
     bootstrap_admin_username: Optional[str] = None
     bootstrap_admin_password: Optional[str] = None
     auth_rate_limit_max_attempts: int = 5
@@ -68,7 +69,11 @@ class Settings(BaseSettings):
             raise ValueError(f"ALGORITHM must be one of: {', '.join(sorted(allowed))}.")
         return normalized
 
-    @field_validator("access_token_expire_minutes", "refresh_token_expire_days")
+    @field_validator(
+        "access_token_expire_minutes",
+        "refresh_token_expire_days",
+        "refresh_token_cleanup_interval_seconds",
+    )
     @classmethod
     def validate_positive_expiry(cls, value: int) -> int:
         if value <= 0:

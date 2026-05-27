@@ -12,7 +12,7 @@ FastAPI を中心に、ユーザー認証、会議室管理、予約管理、Red
 - Redis
 - Pydantic v2 / pydantic-settings
 - Passlib (bcrypt)
-- python-jose
+- PyJWT
 - Alembic
 - pytest / httpx
 
@@ -227,6 +227,24 @@ pytest -q tests/integration
 
 `MYSQL_TEST_DATABASE_URL` のデータベース名には `test` を含めてください。統合テストは各ケースの前にその schema を migration で作り直します。
 
+### CI 品質チェック
+
+GitHub Actions は `requirements-dev.txt` のツールを使って lint、型チェック、単体テストを実行します。ローカルで確認する場合:
+
+```bash
+python -m pip install -r requirements-dev.txt
+ruff check .
+mypy .
+pytest -q tests/unit
+```
+
+依存関係の脆弱性検査はリポジトリルートから次のように実行できます。
+
+```bash
+pip-audit -r backend/requirements.txt
+pip-audit -r frontend/streamlit_app/requirements.txt
+```
+
 ## API エンドポイント
 
 ### 認証
@@ -234,7 +252,8 @@ pytest -q tests/integration
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/logout`（access token は `Authorization: Bearer`、body は `refresh_token` のみ）
+- `POST /api/v1/auth/logout-all`（全端末の refresh session を無効化）
 
 ### ユーザー
 
@@ -254,7 +273,7 @@ pytest -q tests/integration
 ### ヘルスチェック
 
 - `GET /api/v1/health`
-- `GET /api/v1/ready`
+- `GET /api/v1/ready`（DB または必須 Redis 障害時は `503`。任意 Redis 障害時は `200` / `degraded`）
 
 ## データモデル概要
 
@@ -293,8 +312,12 @@ pytest -q tests/integration
 
 - `id`
 - `token_jti`
+- `token_hash`: refresh token の SHA-256 hash
 - `expires_at`
 - `revoked`
+- `user_agent`
+- `ip_address`
+- `device_name`
 - `user_id`
 - `created_at`
 
@@ -306,6 +329,8 @@ pytest -q tests/integration
 - `models/`: SQLAlchemy モデル
 - `schemas/`: Pydantic スキーマ
 - `services/`: ビジネスロジック
+
+MySQL 接続は `READ COMMITTED` で実行し、予約作成時は対象の `rooms` 行を `SELECT ... FOR UPDATE` でロックして、同一会議室の重複判定を直列化します。期限切れの refresh session は token 発行時と `REFRESH_TOKEN_CLEANUP_INTERVAL_SECONDS` 間隔のバックグラウンド処理で削除されます。
 
 ## 運用上の注意
 

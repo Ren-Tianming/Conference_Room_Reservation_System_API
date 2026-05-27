@@ -31,3 +31,17 @@ def test_alembic_migration_creates_expected_tables(client) -> None:
         'user_id',
         'room_id',
     }
+    assert {column['name'] for column in inspector.get_columns('refresh_tokens')} >= {
+        'id',
+        'token_jti',
+        'token_hash',
+        'expires_at',
+        'revoked',
+        'user_agent',
+        'ip_address',
+        'device_name',
+        'user_id',
+    }
+    assert 'ix_refresh_tokens_token_hash' in {
+        index['name'] for index in inspector.get_indexes('refresh_tokens')
+    }

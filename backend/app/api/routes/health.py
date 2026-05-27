@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Union
+
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.core.config import settings
 from app.core.redis_client import get_redis_client
 from app.db.session import SessionLocal
 
@@ -14,8 +18,8 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get('/ready')
-def ready() -> dict[str, str]:
+@router.get('/ready', response_model=None)
+def ready() -> Union[dict[str, str], JSONResponse]:
     db_status = "ok"
     redis_status = "unavailable"
 
@@ -35,4 +39,13 @@ def ready() -> dict[str, str]:
         except Exception:
             redis_status = "error"
 
-    return {"database": db_status, "redis": redis_status}
+    components = {"database": db_status, "redis": redis_status}
+    redis_required = settings.require_redis_for_locks or settings.require_redis_for_token_blacklist
+    if db_status != "ok" or (redis_required and redis_status != "ok"):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", **components},
+        )
+
+    readiness_status = "ready" if redis_status == "ok" else "degraded"
+    return {"status": readiness_status, **components}

@@ -15,6 +15,10 @@ TEST_DB = Path(__file__).parent / 'test_conference_room.db'
 MYSQL_TEST_DATABASE_URL = os.environ.get('MYSQL_TEST_DATABASE_URL')
 USING_MYSQL_INTEGRATION = MYSQL_TEST_DATABASE_URL is not None
 
+os.environ['ENV'] = 'test'
+os.environ['DEBUG'] = 'false'
+os.environ['LOG_LEVEL'] = 'INFO'
+
 if USING_MYSQL_INTEGRATION:
     test_database_url = make_url(MYSQL_TEST_DATABASE_URL)
     database_name = test_database_url.database or ''
@@ -31,7 +35,7 @@ else:
     os.environ['REDIS_URL'] = 'redis://127.0.0.1:0/0'
 
 os.environ['AUTO_CREATE_TABLES'] = 'false'
-os.environ['SECRET_KEY'] = 'test-secret-key'
+os.environ['SECRET_KEY'] = 'test-secret-key-with-at-least-32-characters'
 
 from app.core import redis_client  # noqa: E402
 from app.db.session import engine  # noqa: E402
