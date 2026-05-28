@@ -1,7 +1,7 @@
 services:
   db:
     image: mysql:8.4
-    container_name: conference_room_mysql
+    container_name: conference-room-mysql
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
       MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
@@ -24,7 +24,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: conference_room_redis
+    container_name: conference-room-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -36,9 +36,9 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: conference_room_backend
+    container_name: conference-room-backend
     environment:
-      APP_NAME: ${APP_NAME:-Conference Room Reservation System API}
+      APP_NAME: ${APP_NAME:-conference-room-reservation-system API}
       ENV: ${ENV:-dev}
       DEBUG: ${DEBUG:-false}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -50,6 +50,7 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       REFRESH_TOKEN_CLEANUP_INTERVAL_SECONDS: ${REFRESH_TOKEN_CLEANUP_INTERVAL_SECONDS:-3600}
+      MAX_BOOKING_DURATION_HOURS: ${MAX_BOOKING_DURATION_HOURS:-8}
       AUTH_RATE_LIMIT_MAX_ATTEMPTS: ${AUTH_RATE_LIMIT_MAX_ATTEMPTS:-5}
       AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
@@ -83,7 +84,7 @@ services:
   frontend:
     build:
       context: ./frontend/streamlit_app
-    container_name: conference_room_frontend
+    container_name: conference-room-frontend
     environment:
       BACKEND_BASE_URL: http://backend:8000/api/v1
     ports:

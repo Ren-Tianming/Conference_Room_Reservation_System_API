@@ -10,7 +10,7 @@ from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
-    app_name: str = "Conference Room Reservation System API"
+    app_name: str = "conference-room-reservation-system API"
     env: str = "dev"
     debug: bool = True
     log_level: str = "INFO"
@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     refresh_token_cleanup_interval_seconds: int = 3600
+    max_booking_duration_hours: int = 8
     bootstrap_admin_username: Optional[str] = None
     bootstrap_admin_password: Optional[str] = None
     auth_rate_limit_max_attempts: int = 5
@@ -73,6 +74,7 @@ class Settings(BaseSettings):
         "access_token_expire_minutes",
         "refresh_token_expire_days",
         "refresh_token_cleanup_interval_seconds",
+        "max_booking_duration_hours",
     )
     @classmethod
     def validate_positive_expiry(cls, value: int) -> int:

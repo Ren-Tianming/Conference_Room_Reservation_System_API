@@ -30,6 +30,8 @@ services:
   integration-tests:
     build:
       context: ./backend
+      args:
+        INSTALL_DEV: "true"
     command: ["pytest", "-q", "tests/integration"]
     volumes:
       - ./backend/tests:/app/tests:ro

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -17,7 +15,7 @@ class RefreshRequest(BaseModel):
 class LogoutRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    refresh_token: Optional[str] = None
+    refresh_token: str
 
 
 class TokenResponse(BaseModel):

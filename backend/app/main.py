@@ -112,4 +112,4 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"message": "Conference Room Reservation System API is running."}
+    return {"message": "conference-room-reservation-system API is running."}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Callable
 
 import requests
 from dotenv import load_dotenv
@@ -16,10 +16,20 @@ class ApiClient:
     def __init__(self) -> None:
         self.access_token: str | None = None
         self.refresh_token: str | None = None
+        self._on_tokens_updated: Callable[[str | None, str | None], None] | None = None
 
     def set_tokens(self, access_token: str | None, refresh_token: str | None) -> None:
         self.access_token = access_token
         self.refresh_token = refresh_token
+
+    def set_token_update_callback(self, callback: Callable[[str | None, str | None], None]) -> None:
+        self._on_tokens_updated = callback
+
+    def _update_tokens_from_response(self, token_data: dict[str, Any]) -> None:
+        self.access_token = token_data.get('access_token')
+        self.refresh_token = token_data.get('refresh_token')
+        if self._on_tokens_updated is not None:
+            self._on_tokens_updated(self.access_token, self.refresh_token)
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -57,8 +67,7 @@ class ApiClient:
             if response.status_code == 401 and retry_on_unauthorized and path != '/auth/refresh':
                 refreshed, token_data = self.refresh()
                 if refreshed:
-                    self.access_token = token_data.get('access_token')
-                    self.refresh_token = token_data.get('refresh_token')
+                    self._update_tokens_from_response(token_data)
                     return self._request(method, path, json, retry_on_unauthorized=False)
             return False, data
         except ValueError as exc:
@@ -80,6 +89,8 @@ class ApiClient:
     def logout(self) -> tuple[bool, Any]:
         if not self.access_token:
             return False, {'detail': 'アクセストークンがありません。'}
+        if not self.refresh_token:
+            return False, {'detail': 'リフレッシュトークンがありません。'}
         return self._request(
             'POST',
             '/auth/logout',

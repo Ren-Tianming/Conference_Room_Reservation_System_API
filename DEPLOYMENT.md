@@ -49,7 +49,7 @@ git --version
 ```bash
 sudo mkdir -p /opt/conference-room
 sudo chown "$USER":"$USER" /opt/conference-room
-git clone https://github.com/Ren-Tianming/Conferenceroom_Reservation_System.git /opt/conference-room/app
+git clone https://github.com/Ren-Tianming/conference-room-reservation-system.git /opt/conference-room/app
 cd /opt/conference-room/app
 cp .env.example .env
 ```
@@ -68,6 +68,7 @@ SECRET_KEY=<32文字以上のランダム値>
 JWT_ISSUER=conference-room-api
 JWT_AUDIENCE=conference-room-users
 REFRESH_TOKEN_CLEANUP_INTERVAL_SECONDS=3600
+MAX_BOOKING_DURATION_HOURS=8
 
 MYSQL_DATABASE=conference_room
 MYSQL_USER=conference_user

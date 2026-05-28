@@ -145,8 +145,27 @@ def test_refresh_token_rotation_rejects_reuse(client: TestClient) -> None:
     assert reused.status_code == 401
 
 
+def test_refresh_token_rotation_rejects_inactive_user(client: TestClient) -> None:
+    tokens = register_and_login(client, username='inactive-refresh-user')
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == 'inactive-refresh-user').one()
+        user.is_active = False
+        db.add(user)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post('/api/v1/auth/refresh', json={'refresh_token': tokens['refresh_token']})
+
+    assert response.status_code == 403
+
+
 def test_logout_reads_access_token_from_header_and_revokes_one_session(client: TestClient) -> None:
     tokens = register_and_login(client, username='logout-user')
+    missing_refresh = client.post('/api/v1/auth/logout', json={}, headers=auth_header(tokens))
+    assert missing_refresh.status_code == 422
+
     response = client.post(
         '/api/v1/auth/logout',
         json={'refresh_token': tokens['refresh_token']},
@@ -315,3 +334,45 @@ def test_booking_conflict_and_cancel_flow(client: TestClient) -> None:
     assert client.post('/api/v1/bookings', json=payload, headers=auth_header(tokens)).status_code == 409
     assert client.delete(f"/api/v1/bookings/{first.json()['id']}", headers=auth_header(tokens)).status_code == 200
     assert client.post('/api/v1/bookings', json=payload, headers=auth_header(tokens)).status_code == 201
+
+
+def test_booking_time_validation_rejects_naive_past_and_long_duration(client: TestClient) -> None:
+    tokens = register_and_login(client, username='time-validation-user')
+    promote_to_admin('time-validation-user')
+    room = client.post(
+        '/api/v1/rooms',
+        json={'name': 'Time-Validation-Room', 'capacity': 4, 'location': 'HQ', 'description': None},
+        headers=auth_header(tokens),
+    )
+    assert room.status_code == 201
+    room_id = room.json()['id']
+
+    future_start = datetime.now(timezone.utc) + timedelta(days=1)
+    base_payload = {
+        'room_id': room_id,
+        'title': 'Planning',
+        'purpose': 'Validation',
+        'attendee_count': 3,
+    }
+
+    naive = {
+        **base_payload,
+        'start_time': future_start.replace(tzinfo=None).isoformat(),
+        'end_time': (future_start + timedelta(hours=1)).replace(tzinfo=None).isoformat(),
+    }
+    assert client.post('/api/v1/bookings', json=naive, headers=auth_header(tokens)).status_code == 422
+
+    past_start = datetime.now(timezone.utc) - timedelta(hours=2)
+    past = {
+        **base_payload,
+        'start_time': past_start.isoformat(),
+        'end_time': (past_start + timedelta(hours=1)).isoformat(),
+    }
+    assert client.post('/api/v1/bookings', json=past, headers=auth_header(tokens)).status_code == 422
+
+    too_long = {
+        **base_payload,
+        'start_time': future_start.isoformat(),
+        'end_time': (future_start + timedelta(hours=settings.max_booking_duration_hours, minutes=1)).isoformat(),
+    }
+    assert client.post('/api/v1/bookings', json=too_long, headers=auth_header(tokens)).status_code == 422

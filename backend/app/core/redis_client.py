@@ -4,6 +4,7 @@ import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Iterator, Optional, Union, cast
 
 from fastapi import HTTPException, status
@@ -15,13 +16,26 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 _SENTINEL = object()
 _cached_client: Union[Redis, object, None] = _SENTINEL
+_fallback_locks_guard = Lock()
+_fallback_room_locks: dict[int, Lock] = {}
 
 
-class DummyLock:
+class ProcessLocalRoomLock:
+    def __init__(self, room_id: int) -> None:
+        self.room_id = room_id
+        self._lock = self._get_lock(room_id)
+
+    @staticmethod
+    def _get_lock(room_id: int) -> Lock:
+        with _fallback_locks_guard:
+            return _fallback_room_locks.setdefault(room_id, Lock())
+
     def __enter__(self):
+        self._lock.acquire()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self._lock.release()
         return False
 
 
@@ -112,8 +126,9 @@ def room_lock(room_id: int) -> Iterator[object]:
     if client is None:
         if settings.require_redis_for_locks:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Redis が利用できないため予約ロックを取得できません。')
-        logger.warning('Using in-process fallback lock for room_id=%s because Redis is unavailable.', room_id)
-        yield DummyLock()
+        logger.warning('Using process-local room lock for room_id=%s because Redis is unavailable.', room_id)
+        with ProcessLocalRoomLock(room_id) as lock:
+            yield lock
         return
 
     lock = client.lock(f"lock:room:{room_id}", timeout=10, blocking_timeout=3)

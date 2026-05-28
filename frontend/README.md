@@ -94,6 +94,7 @@ Docker Compose で起動する場合、`docker-compose.yml` が `BACKEND_BASE_UR
 
 - JSON 以外のレスポンスでもエラーメッセージを表示します。
 - access token が期限切れで `401` が返った場合、refresh token で再発行を試み、成功すれば 1 回だけ元のリクエストを再実行します。
+- refresh token の再発行に成功した場合、新しい access / refresh token を Streamlit の `st.session_state` に保存します。
 - refresh / logout は無限リトライを避けるため、自動再試行しません。
 
 ## 補足

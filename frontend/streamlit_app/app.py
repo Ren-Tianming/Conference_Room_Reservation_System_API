@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -17,6 +18,14 @@ if 'refresh_token' not in st.session_state:
 
 client: ApiClient = st.session_state.client
 client.set_tokens(st.session_state.access_token, st.session_state.refresh_token)
+
+
+def sync_tokens_from_client(access_token: str | None, refresh_token: str | None) -> None:
+    st.session_state.access_token = access_token
+    st.session_state.refresh_token = refresh_token
+
+
+client.set_token_update_callback(sync_tokens_from_client)
 
 
 def save_tokens(data: dict) -> None:
@@ -132,8 +141,9 @@ with st.form('create_booking_form'):
 
     submitted_booking = st.form_submit_button('予約する')
     if submitted_booking:
-        start_dt = datetime.combine(start_date, start_clock).isoformat()
-        end_dt = datetime.combine(end_date, end_clock).isoformat()
+        app_timezone = ZoneInfo('Asia/Tokyo')
+        start_dt = datetime.combine(start_date, start_clock, tzinfo=app_timezone).isoformat()
+        end_dt = datetime.combine(end_date, end_clock, tzinfo=app_timezone).isoformat()
         ok, data = client.create_booking(
             room_id=int(room_id),
             title=title,

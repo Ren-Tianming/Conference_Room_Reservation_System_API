@@ -235,6 +235,8 @@ def rotate_refresh_token(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='ユーザーが存在しません。')
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='無効なユーザーです。')
 
     return create_access_and_refresh_tokens(db, user, metadata)
 
